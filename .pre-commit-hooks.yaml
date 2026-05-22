@@ -1,0 +1,8 @@
+- id: stackgauge
+  name: Stack depth analysis
+  description: Fail if embedded firmware stack depth exceeds threshold
+  language: system
+  entry: stackgauge
+  # Override thresholds per-project in .pre-commit-config.yaml args:
+  # args: [--stack-threshold=1024, --depth-threshold=10, --su-dir=build]
+  pass_filenames: false

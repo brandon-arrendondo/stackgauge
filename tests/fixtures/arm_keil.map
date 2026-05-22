@@ -1,0 +1,35 @@
+ARM Linker, 5.06 update 7 (build 960) Tool: armlink []
+
+==============================================================================
+
+Image Symbol Table
+
+    Local Symbols
+
+    Symbol Name                              Value     Ov Type        Size  Object(Section)
+
+    RESET                                 0x08000000   Section      0x0188  startup.o(RESET)
+
+    Global Symbols
+
+    Symbol Name                              Value     Ov Type        Size  Object(Section)
+
+    Reset_Handler                         0x08000189   Thumb Code     72  startup.o(.text)
+    main                                  0x080001d1   Thumb Code     92  main.o(.text)
+    process_data                          0x0800022d   Thumb Code    136  utils.o(.text)
+    helper                                0x080002b5   Thumb Code     52  utils.o(.text)
+
+==============================================================================
+
+Call Graph
+
+   Maximum Stack Usage = 304 bytes + Unknown(Cycles, Untouched)
+
+   Call chain for Maximum Stack Usage:
+
+    main [24] calls
+      process_data [128] calls
+        helper [80] calls
+          deep_leaf [72]
+
+==============================================================================

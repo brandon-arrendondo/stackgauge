@@ -1,0 +1,14 @@
+# stackgauge configuration
+# All values here are overridden by CLI flags.
+
+# Fail if worst-case stack usage exceeds this many bytes.
+# stack_threshold = 1024
+
+# Fail if the call depth exceeds this count (ARM/Keil call graph only).
+# depth_threshold = 10
+
+# Directories to search recursively for GCC .su files.
+# su_dirs = ["build/CMakeFiles", "build"]
+
+# Force a specific map file format (auto-detected by default).
+# toolchain = "gnu-ld"  # gnu-ld | arm-keil | esp-idf

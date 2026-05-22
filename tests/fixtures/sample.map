@@ -1,0 +1,32 @@
+Memory Configuration
+
+Name             Origin             Length             Attributes
+RAM              0x20000000         0x00020000         xrw
+FLASH            0x08000000         0x00080000         xr
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD /path/to/startup.o
+LOAD /path/to/main.o
+LOAD /path/to/utils.o
+
+.text           0x0000000008000000     0x1234
+ *(.isr_vector)
+ .isr_vector    0x0000000008000000      0x188 startup.o
+                0x0000000008000000                _Vectors
+ *(.text*)
+ .text.Reset_Handler
+                0x0000000008000188       0x48 startup.o
+                0x0000000008000188                Reset_Handler
+ .text.main
+                0x00000000080001d0       0x5c main.o
+                0x00000000080001d0                main
+ .text.process_data
+                0x000000000800022c       0x88 utils.o
+                0x000000000800022c                process_data
+ .text.helper
+                0x00000000080002b4       0x34 utils.o
+                0x00000000080002b4                helper
+
+.bss            0x0000000020000000      0x200
