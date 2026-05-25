@@ -7,6 +7,9 @@
 # Fail if the call depth exceeds this count (ARM/Keil call graph only).
 # depth_threshold = 10
 
+# Number of functions to show in text output (default 10; use -v to show all).
+# top_n = 20
+
 # Directories to search recursively for GCC .su files.
 # su_dirs = ["build/CMakeFiles", "build"]
 
