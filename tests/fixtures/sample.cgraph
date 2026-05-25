@@ -1,0 +1,26 @@
+;; Function main (main, funcdef_no=0, decl_uid=1, cgraph_uid=0, symbol_order=0)
+
+Printing the call graph.
+  main/0 (main) @src/main.c:10:1
+    Availability: available
+    Function flags: count:1 (estimated locally) executed once
+    Called by:
+    Calls: process_data/1 helper/2
+
+  process_data/1 (process_data) @src/utils.c:50:1
+    Availability: available
+    Function flags: count:100 (estimated locally)
+    Called by: main/0
+    Calls: deep_leaf/3
+
+  helper/2 (helper) @src/utils.c:100:1
+    Availability: available
+    Function flags: count:10 (estimated locally)
+    Called by: main/0
+    Calls:
+
+  deep_leaf/3 (deep_leaf) @src/utils.c:20:1
+    Availability: available
+    Function flags: count:100 (estimated locally)
+    Called by: process_data/1
+    Calls:

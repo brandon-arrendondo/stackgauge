@@ -1,4 +1,5 @@
 mod analysis;
+mod cgraph;
 mod config;
 mod map;
 mod su;
@@ -44,6 +45,14 @@ struct Args {
     /// Explicit .su file to include (repeatable)
     #[arg(long = "su-file", value_name = "FILE")]
     su_files: Vec<PathBuf>,
+
+    /// Directory to search recursively for GCC IPA cgraph dumps (repeatable)
+    #[arg(long = "cgraph-dir", value_name = "DIR")]
+    cgraph_dirs: Vec<PathBuf>,
+
+    /// Explicit GCC IPA cgraph dump file to include (repeatable)
+    #[arg(long = "cgraph-file", value_name = "FILE")]
+    cgraph_files: Vec<PathBuf>,
 
     /// Fail if worst-case stack exceeds this many bytes
     #[arg(short = 't', long, value_name = "BYTES")]
@@ -111,8 +120,29 @@ fn run(args: Args) -> Result<bool> {
     // Parse map file
     let toolchain_hint = args.toolchain.as_deref().or(cfg.toolchain.as_deref());
 
-    let map_data = map::parse_map(&args.map_file, toolchain_hint)
+    let mut map_data = map::parse_map(&args.map_file, toolchain_hint)
         .with_context(|| format!("parsing {}", args.map_file.display()))?;
+
+    // For GNU ld / ESP-IDF: load GCC IPA call graph dumps to enable depth analysis
+    if matches!(map_data.format, map::MapFormat::GnuLd | map::MapFormat::EspIdf) {
+        let cgraph_dir_refs: Vec<&std::path::Path> =
+            args.cgraph_dirs.iter().map(|p| p.as_path()).collect();
+        let mut cgraph_paths = cgraph::collect_cgraph_files(&cgraph_dir_refs);
+        cgraph_paths.extend(args.cgraph_files.iter().cloned());
+
+        if !cgraph_paths.is_empty() {
+            let graph = cgraph::load_cgraph(&cgraph_paths);
+            if !graph.is_empty() {
+                let su_frames: std::collections::HashMap<String, u64> = su_entries
+                    .iter()
+                    .map(|e| (e.function_name.clone(), e.frame_size))
+                    .collect();
+                if let Some(ms) = cgraph::build_max_stack(&graph, &su_frames) {
+                    map_data.max_stack = Some(ms);
+                }
+            }
+        }
+    }
 
     // Run analysis
     let result = analysis::run(
@@ -240,10 +270,14 @@ fn print_text(
         }
     }
 
-    // Call graph analysis (ARM/Keil)
+    // Call graph analysis
     if let Some(chain_bytes) = r.max_chain_bytes {
         println!();
-        println!("Call graph analysis (ARM/Keil)");
+        let cg_label = match r.format {
+            map::MapFormat::ArmKeil => "Call graph analysis (ARM/Keil)",
+            _ => "Call graph analysis (GCC IPA cgraph)",
+        };
+        println!("{cg_label}");
         println!("{}", "-".repeat(60));
 
         let unknown_suffix = if r.max_chain_has_unknown {
