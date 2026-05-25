@@ -133,3 +133,95 @@ pub fn load_su_entries(su_files: &[std::path::PathBuf]) -> Vec<SuEntry> {
     }
     entries
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_su_file, parse_su_line, FrameType};
+
+    #[test]
+    fn test_parse_fixture() {
+        let path = std::path::Path::new("tests/fixtures/main.su");
+        let entries = parse_su_file(path).unwrap();
+        assert_eq!(entries.len(), 4);
+
+        let e = &entries[0];
+        assert_eq!(e.source_file, "src/main.c");
+        assert_eq!(e.line, 42);
+        assert_eq!(e.col, 5);
+        assert_eq!(e.function_name, "main");
+        assert_eq!(e.frame_size, 32);
+        assert_eq!(e.frame_type, FrameType::Static);
+
+        assert_eq!(entries[1].frame_type, FrameType::Dynamic);
+        assert_eq!(entries[2].frame_type, FrameType::Static);
+        assert_eq!(entries[3].frame_type, FrameType::DynamicBounded);
+    }
+
+    #[test]
+    fn test_static_frame() {
+        let e = parse_su_line("src/foo.c:10:3:bar\t48\tstatic").unwrap();
+        assert_eq!(e.frame_type, FrameType::Static);
+        assert_eq!(e.frame_size, 48);
+        assert_eq!(e.function_name, "bar");
+    }
+
+    #[test]
+    fn test_dynamic_frame() {
+        let e = parse_su_line("src/foo.c:10:3:bar\t64\tdynamic").unwrap();
+        assert_eq!(e.frame_type, FrameType::Dynamic);
+    }
+
+    #[test]
+    fn test_dynamic_bounded_frame() {
+        let e = parse_su_line("src/foo.c:10:3:bar\t128\tdynamic,bounded").unwrap();
+        assert_eq!(e.frame_type, FrameType::DynamicBounded);
+    }
+
+    #[test]
+    fn test_unknown_frame() {
+        let e = parse_su_line("src/foo.c:10:3:bar\t32\tsome_other").unwrap();
+        assert_eq!(e.frame_type, FrameType::Unknown("some_other".to_string()));
+    }
+
+    #[test]
+    fn test_three_part_fallback() {
+        // Some GCC versions omit the column number
+        let e = parse_su_line("src/foo.c:10:bar\t32\tstatic").unwrap();
+        assert_eq!(e.source_file, "src/foo.c");
+        assert_eq!(e.line, 10);
+        assert_eq!(e.col, 0);
+        assert_eq!(e.function_name, "bar");
+        assert_eq!(e.frame_size, 32);
+        assert_eq!(e.frame_type, FrameType::Static);
+    }
+
+    #[test]
+    fn test_two_part_location_returns_none() {
+        // file:func with no line number — not a valid 3-part or 4-part location
+        assert!(parse_su_line("src/foo.c:bar\t32\tstatic").is_none());
+    }
+
+    #[test]
+    fn test_malformed_no_tabs_returns_none() {
+        assert!(parse_su_line("src/foo.c:10:3:bar 32 static").is_none());
+    }
+
+    #[test]
+    fn test_is_bounded() {
+        assert!(FrameType::Static.is_bounded());
+        assert!(FrameType::DynamicBounded.is_bounded());
+        assert!(!FrameType::Dynamic.is_bounded());
+        assert!(!FrameType::Unknown("x".to_string()).is_bounded());
+    }
+
+    #[test]
+    fn test_all_fields_four_part() {
+        let e = parse_su_line("src/app/module.c:99:12:do_work\t256\tdynamic,bounded").unwrap();
+        assert_eq!(e.source_file, "src/app/module.c");
+        assert_eq!(e.line, 99);
+        assert_eq!(e.col, 12);
+        assert_eq!(e.function_name, "do_work");
+        assert_eq!(e.frame_size, 256);
+        assert_eq!(e.frame_type, FrameType::DynamicBounded);
+    }
+}

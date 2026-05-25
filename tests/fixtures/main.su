@@ -1,3 +1,4 @@
 src/main.c:42:5:main	32	static
 src/main.c:120:8:process_data	256	dynamic
 src/main.c:200:3:helper	16	static
+src/main.c:250:1:isr_handler	128	dynamic,bounded
