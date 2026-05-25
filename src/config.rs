@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     pub stack_threshold: Option<u64>,
     pub depth_threshold: Option<usize>,
+    pub top_n: Option<usize>,
     #[serde(default)]
     pub su_dirs: Vec<String>,
     pub format: Option<String>,

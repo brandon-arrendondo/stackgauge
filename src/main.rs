@@ -66,7 +66,11 @@ struct Args {
     #[arg(short, long, default_value = "text")]
     format: OutputFormat,
 
-    /// Show all functions, not just the top 10 worst
+    /// Number of functions to show (default 10); ignored when -v is set
+    #[arg(long, value_name = "N")]
+    top_n: Option<usize>,
+
+    /// Show all functions, not just the top N worst
     #[arg(short, long)]
     verbose: bool,
 
@@ -103,6 +107,7 @@ fn run(args: Args) -> Result<bool> {
     // Merge thresholds: CLI overrides config file
     let stack_threshold = args.stack_threshold.or(cfg.stack_threshold);
     let depth_threshold = args.depth_threshold.or(cfg.depth_threshold);
+    let top_n = args.top_n.or(cfg.top_n).unwrap_or(10);
 
     // Resolve .su search directories from CLI + config
     let mut su_dirs: Vec<PathBuf> = args.su_dirs.clone();
@@ -157,7 +162,7 @@ fn run(args: Args) -> Result<bool> {
     );
 
     match args.format {
-        OutputFormat::Text => print_text(&result, args.verbose, stack_threshold, depth_threshold),
+        OutputFormat::Text => print_text(&result, args.verbose, top_n, stack_threshold, depth_threshold),
         OutputFormat::Json => print_json(&result)?,
     }
 
@@ -185,6 +190,7 @@ fn main() {
 fn print_text(
     r: &AnalysisResult,
     verbose: bool,
+    top_n: usize,
     stack_threshold: Option<u64>,
     depth_threshold: Option<usize>,
 ) {
@@ -220,7 +226,7 @@ fn print_text(
         println!("Per-function stack frames");
         println!("{}", "-".repeat(60));
 
-        let display_limit = if verbose { r.functions.len() } else { 10 };
+        let display_limit = if verbose { r.functions.len() } else { top_n };
         let col_w = 40usize;
 
         for func in r.functions.iter().take(display_limit) {
