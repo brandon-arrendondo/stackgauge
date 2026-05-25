@@ -8,6 +8,8 @@ pub struct Config {
     pub top_n: Option<usize>,
     #[serde(default)]
     pub su_dirs: Vec<String>,
+    #[serde(default)]
+    pub exclude_dirs: Vec<String>,
     pub format: Option<String>,
     pub toolchain: Option<String>,
 }

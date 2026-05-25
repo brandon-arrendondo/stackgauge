@@ -66,6 +66,10 @@ struct Args {
     #[arg(short, long, default_value = "text")]
     format: OutputFormat,
 
+    /// Skip directories with this name during .su / .cgraph search (repeatable)
+    #[arg(long = "exclude-dir", value_name = "NAME")]
+    exclude_dirs: Vec<String>,
+
     /// Number of functions to show (default 10); ignored when -v is set
     #[arg(long, value_name = "N")]
     top_n: Option<usize>,
@@ -109,6 +113,20 @@ fn run(args: Args) -> Result<bool> {
     let depth_threshold = args.depth_threshold.or(cfg.depth_threshold);
     let top_n = args.top_n.or(cfg.top_n).unwrap_or(10);
 
+    // Build exclusion list: CLI + config + built-in CMake probe dirs
+    let mut exclude_dirs: Vec<String> = args.exclude_dirs.clone();
+    for d in &cfg.exclude_dirs {
+        if !exclude_dirs.contains(d) {
+            exclude_dirs.push(d.clone());
+        }
+    }
+    for default in &["CompilerIdC", "CompilerIdCXX", "CompilerIdASM"] {
+        let s = default.to_string();
+        if !exclude_dirs.contains(&s) {
+            exclude_dirs.push(s);
+        }
+    }
+
     // Resolve .su search directories from CLI + config
     let mut su_dirs: Vec<PathBuf> = args.su_dirs.clone();
     for d in &cfg.su_dirs {
@@ -117,7 +135,7 @@ fn run(args: Args) -> Result<bool> {
 
     // Collect .su files
     let dir_refs: Vec<&std::path::Path> = su_dirs.iter().map(|p| p.as_path()).collect();
-    let mut su_file_paths: Vec<PathBuf> = su::collect_su_files(&dir_refs);
+    let mut su_file_paths: Vec<PathBuf> = su::collect_su_files(&dir_refs, &exclude_dirs);
     su_file_paths.extend(args.su_files.iter().cloned());
     let su_file_count = su_file_paths.len();
     let su_entries = su::load_su_entries(&su_file_paths);
@@ -132,7 +150,7 @@ fn run(args: Args) -> Result<bool> {
     if matches!(map_data.format, map::MapFormat::GnuLd | map::MapFormat::EspIdf) {
         let cgraph_dir_refs: Vec<&std::path::Path> =
             args.cgraph_dirs.iter().map(|p| p.as_path()).collect();
-        let mut cgraph_paths = cgraph::collect_cgraph_files(&cgraph_dir_refs);
+        let mut cgraph_paths = cgraph::collect_cgraph_files(&cgraph_dir_refs, &exclude_dirs);
         cgraph_paths.extend(args.cgraph_files.iter().cloned());
 
         if !cgraph_paths.is_empty() {

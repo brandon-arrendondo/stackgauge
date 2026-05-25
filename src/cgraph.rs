@@ -31,28 +31,36 @@ pub fn parse_cgraph(content: &str) -> HashMap<String, Vec<String>> {
 }
 
 /// Walk dirs for files whose name ends with `.cgraph` (e.g. `foo.c.001i.cgraph`).
-pub fn collect_cgraph_files(dirs: &[&Path]) -> Vec<PathBuf> {
+pub fn collect_cgraph_files(dirs: &[&Path], exclude_dirs: &[String]) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for dir in dirs {
         for entry in WalkDir::new(dir)
             .follow_links(false)
             .into_iter()
+            .filter_entry(|e| !is_excluded_dir(e, exclude_dirs))
             .filter_map(|e| e.ok())
         {
-            if entry.file_type().is_file() {
-                if entry
+            if entry.file_type().is_file()
+                && entry
                     .path()
                     .file_name()
                     .and_then(|n| n.to_str())
                     .map(|n| n.ends_with(".cgraph"))
                     .unwrap_or(false)
-                {
-                    files.push(entry.path().to_path_buf());
-                }
+            {
+                files.push(entry.path().to_path_buf());
             }
         }
     }
     files
+}
+
+fn is_excluded_dir(entry: &walkdir::DirEntry, exclude_dirs: &[String]) -> bool {
+    if !entry.file_type().is_dir() {
+        return false;
+    }
+    let name = entry.file_name().to_str().unwrap_or("");
+    exclude_dirs.iter().any(|ex| ex == name)
 }
 
 /// Load and merge call graphs from multiple dump files.

@@ -69,6 +69,7 @@ Options:
       --su-file <FILE>        Add a single .su file explicitly (repeatable)
       --cgraph-dir <DIR>      Search DIR recursively for *.cgraph dumps (repeatable)
       --cgraph-file <FILE>    Add a single .cgraph file explicitly (repeatable)
+      --exclude-dir <NAME>   Skip directories named NAME during .su / .cgraph search (repeatable)
   -t, --stack-threshold <N>  Fail if worst-case stack exceeds N bytes
       --depth-threshold <N>  Fail if call depth exceeds N (ARM/Keil or cgraph)
       --top-n <N>            Functions to show (default 10; see also -v)
@@ -113,6 +114,10 @@ CLI flags always override config values.
 
 # Fail if worst-case stack exceeds this many bytes
 stack_threshold = 2048
+
+# Directory names to exclude from .su / .cgraph search.
+# CompilerIdC, CompilerIdCXX, CompilerIdASM are excluded by default.
+# exclude_dirs = ["my_probe_dir"]
 
 # Fail if call depth exceeds this (ARM/Keil or GNU ld + cgraph)
 depth_threshold = 12

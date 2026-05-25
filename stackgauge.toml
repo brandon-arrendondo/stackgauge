@@ -13,5 +13,10 @@
 # Directories to search recursively for GCC .su files.
 # su_dirs = ["build/CMakeFiles", "build"]
 
+# Directory names to exclude from .su / .cgraph search.
+# CompilerIdC, CompilerIdCXX, and CompilerIdASM are excluded by default
+# (they are CMake compiler-probe artifacts that pollute function names).
+# exclude_dirs = ["CompilerIdC", "my_other_probe_dir"]
+
 # Force a specific map file format (auto-detected by default).
 # toolchain = "gnu-ld"  # gnu-ld | arm-keil | esp-idf

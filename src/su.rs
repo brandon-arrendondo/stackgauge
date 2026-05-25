@@ -105,12 +105,13 @@ fn parse_su_line(line: &str) -> Option<SuEntry> {
     })
 }
 
-pub fn collect_su_files(dirs: &[&Path]) -> Vec<std::path::PathBuf> {
+pub fn collect_su_files(dirs: &[&Path], exclude_dirs: &[String]) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     for dir in dirs {
         for entry in WalkDir::new(dir)
             .follow_links(false)
             .into_iter()
+            .filter_entry(|e| !is_excluded_dir(e, exclude_dirs))
             .filter_map(|e| e.ok())
         {
             if entry.file_type().is_file()
@@ -121,6 +122,14 @@ pub fn collect_su_files(dirs: &[&Path]) -> Vec<std::path::PathBuf> {
         }
     }
     files
+}
+
+fn is_excluded_dir(entry: &walkdir::DirEntry, exclude_dirs: &[String]) -> bool {
+    if !entry.file_type().is_dir() {
+        return false;
+    }
+    let name = entry.file_name().to_str().unwrap_or("");
+    exclude_dirs.iter().any(|ex| ex == name)
 }
 
 pub fn load_su_entries(su_files: &[std::path::PathBuf]) -> Vec<SuEntry> {
