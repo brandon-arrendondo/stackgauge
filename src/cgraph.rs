@@ -188,12 +188,12 @@ fn dfs_max_bytes(
 
 // ── Parsing helpers ───────────────────────────────────────────────────────────
 
-/// Matches indented node lines: `  funcname/N (alias) @file:line:col`
+/// Matches function node lines: `funcname/N (alias) ...`
+///
+/// GCC 9.x "Initial Symbol table" format puts nodes at column 0.
+/// Older "Printing the call graph" format indents them. Both are accepted.
 fn parse_node_line(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
-    if trimmed.len() == line.len() {
-        return None; // not indented — skip headers and top-level comments
-    }
     let slash = trimmed.find('/')?;
     let name = &trimmed[..slash];
     if !is_valid_ident(name) {
@@ -337,6 +337,29 @@ mod tests {
         let foo_calls = graph.get("foo").unwrap();
         assert_eq!(foo_calls.len(), 1);
         assert_eq!(foo_calls[0], "baz");
+    }
+
+    #[test]
+    fn test_gcc9_initial_symbol_table_format() {
+        // GCC 9.x emits node headers at column 0; Calls: is indented 2 spaces.
+        let content = r#"
+Initial Symbol table:
+
+bar/1 (bar) @0x7f0000000000
+  Type: function definition analyzed
+  Called by:
+  Calls: baz/2
+
+baz/2 (baz) @0x7f0000000100
+  Type: function definition analyzed
+  Called by: bar/1
+  Calls:
+"#;
+        let graph = parse_cgraph(content);
+        assert!(graph.contains_key("bar"), "bar not parsed");
+        assert!(graph.contains_key("baz"), "baz not parsed");
+        assert_eq!(graph["bar"], vec!["baz"]);
+        assert!(graph["baz"].is_empty());
     }
 
     #[test]

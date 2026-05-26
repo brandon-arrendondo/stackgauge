@@ -168,6 +168,87 @@ Without `--cgraph-dir`, you get per-function frame sizes but no
 cumulative depth analysis. Add it once your build supports
 `-fdump-ipa-cgraph`.
 
+#### Worked example: CMake ARM GCC project
+
+This walks through enabling cgraph on a real Cortex-M23 project
+(`d_leo_main`, GD32C231K8T6, 2 KB stack budget). The same steps apply to
+any CMake + ARM GCC build.
+
+**Step 1 — edit `app/CMakeLists.txt`**
+
+Locate the `target_compile_options` call for your main target and add the
+two flags:
+
+```cmake
+target_compile_options(d_leo_main PRIVATE
+    # ... existing flags ...
+    -fstack-usage
+    -fdump-ipa-cgraph
+)
+```
+
+**Step 2 — rebuild**
+
+```bash
+cmake --build build/Debug
+```
+
+GCC writes one `.su` and one `.cgraph` file per translation unit, placed
+next to each `.o` in the CMake object directory:
+
+```
+build/Debug/CMakeFiles/d_leo_main.dir/app/src/
+    main.c.o
+    main.c.su
+    main.c.001i.cgraph
+build/Debug/CMakeFiles/d_leo_main.dir/app/src/lin/
+    lin_bg.c.o
+    lin_bg.c.su
+    lin_bg.c.001i.cgraph
+```
+
+**Step 3 — run stackgauge**
+
+```bash
+stackgauge build/Debug/d_leo_main.map \
+    --su-dir     build/Debug/CMakeFiles/d_leo_main.dir \
+    --cgraph-dir build/Debug/CMakeFiles/d_leo_main.dir \
+    --stack-threshold 2048
+```
+
+If you already ran stackgauge before adding cgraph support (`.su` files
+present, no `.cgraph` files), the output will include per-function frame
+sizes but report no depth. Re-running after the rebuild with `--cgraph-dir`
+adds worst-case depth to every chain that cgraph can see.
+
+#### Indirect calls and function pointers
+
+`-fdump-ipa-cgraph` only captures static call edges that GCC can see at
+compile time. Calls through function pointers are absent from the dump, so
+any call chain that crosses them will have its depth silently
+underestimated.
+
+For `d_leo_main` two edges are not captured by cgraph:
+
+| Caller | Callee | Reason |
+|--------|--------|--------|
+| `lin_bg_publish_response` | `main_Status_serialize` | function pointer dispatch |
+| `lin_bg_handle_frame_complete` | `ui_Status_deserialize` | function pointer dispatch |
+
+Workaround: write a hand-crafted `.cgraph` snippet that describes those
+edges and pass it with `--cgraph-file`:
+
+```bash
+stackgauge build/Debug/d_leo_main.map \
+    --su-dir     build/Debug/CMakeFiles/d_leo_main.dir \
+    --cgraph-dir build/Debug/CMakeFiles/d_leo_main.dir \
+    --cgraph-file extra_edges.cgraph \
+    --stack-threshold 2048
+```
+
+The `.cgraph` format mirrors GCC's output; the parser accepts partial
+files, so you only need to list the missing edges.
+
 ### ARM/Keil MDK (armlink)
 
 The Keil map file already contains a symbol table and a call graph with
