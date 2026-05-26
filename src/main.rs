@@ -298,7 +298,8 @@ fn print_text(
     if let Some(chain_bytes) = r.max_chain_bytes {
         println!();
         let cg_label = match r.format {
-            map::MapFormat::ArmKeil => "Call graph analysis (ARM/Keil)",
+            map::MapFormat::ArmKeil => "Call graph analysis (ARM/Keil MDK)",
+            map::MapFormat::KeilC51 => "Call graph analysis (Keil C51/LX51 XDATA overlay)",
             _ => "Call graph analysis (GCC IPA cgraph)",
         };
         println!("{cg_label}");

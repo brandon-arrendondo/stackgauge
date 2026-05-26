@@ -96,6 +96,23 @@ pub fn run(
             }
         }
 
+        MapFormat::KeilC51 => {
+            // Overlay map gives us the complete function list with XDATA frame sizes.
+            // No .su files needed — use map symbols directly.
+            for sym in &map.symbols {
+                // Only include functions that have a non-zero frame or appear in the call graph
+                if sym.size > 0 || sym.name.contains('/') {
+                    functions.push(FunctionStackInfo {
+                        name: sym.name.clone(),
+                        frame_size: sym.size,
+                        frame_type: crate::su::FrameType::Static,
+                        source_file: sym.object_file.clone().unwrap_or_default(),
+                        line: 0,
+                    });
+                }
+            }
+        }
+
         MapFormat::GnuLd | MapFormat::EspIdf => {
             // Build set of symbol names from map for filtering
             let map_symbols: std::collections::HashSet<&str> =

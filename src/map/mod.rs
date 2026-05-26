@@ -1,5 +1,6 @@
 pub mod arm_keil;
 pub mod gnu_ld;
+pub mod keil_lx51;
 
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -9,14 +10,16 @@ pub enum MapFormat {
     GnuLd,
     ArmKeil,
     EspIdf,
+    KeilC51,
 }
 
 impl std::fmt::Display for MapFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MapFormat::GnuLd => write!(f, "GNU ld"),
-            MapFormat::ArmKeil => write!(f, "ARM/Keil"),
+            MapFormat::ArmKeil => write!(f, "ARM/Keil MDK"),
             MapFormat::EspIdf => write!(f, "ESP-IDF (Xtensa/GNU ld)"),
+            MapFormat::KeilC51 => write!(f, "Keil C51/LX51 (8051)"),
         }
     }
 }
@@ -66,11 +69,16 @@ pub struct MapData {
 pub fn detect_format(content: &str, hint: Option<&str>) -> MapFormat {
     if let Some(h) = hint {
         match h {
-            "arm-keil" | "arm_keil" | "keil" => return MapFormat::ArmKeil,
+            "arm-keil" | "arm_keil" => return MapFormat::ArmKeil,
             "gnu-ld" | "gnu_ld" | "gnu" => return MapFormat::GnuLd,
             "esp-idf" | "esp_idf" | "esp32" | "xtensa" => return MapFormat::EspIdf,
+            "keil-c51" | "keil_c51" | "c51" | "lx51" | "8051" => return MapFormat::KeilC51,
             _ => {}
         }
+    }
+
+    if content.contains("LX51 LINKER") || content.contains("OVERLAY MAP OF MODULE") {
+        return MapFormat::KeilC51;
     }
 
     if content.contains("ARM Linker")
@@ -97,5 +105,6 @@ pub fn parse_map(path: &Path, hint: Option<&str>) -> Result<MapData> {
     match format {
         MapFormat::ArmKeil => arm_keil::parse(&content, format),
         MapFormat::GnuLd | MapFormat::EspIdf => gnu_ld::parse(&content, format),
+        MapFormat::KeilC51 => keil_lx51::parse(&content, format),
     }
 }
