@@ -29,11 +29,7 @@ enum OutputFormat {
 ///   1  threshold exceeded (pre-commit fails here)
 ///   2  fatal error (parse failure, missing file, etc.)
 #[derive(Parser, Debug)]
-#[command(
-    version,
-    args_override_self = true,
-    verbatim_doc_comment
-)]
+#[command(version, args_override_self = true, verbatim_doc_comment)]
 struct Args {
     /// Map file to analyze
     map_file: PathBuf,
@@ -94,11 +90,7 @@ fn load_config(path: Option<&PathBuf>) -> Config {
 
     match std::fs::read_to_string(&candidate) {
         Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
-            eprintln!(
-                "warning: failed to parse {}: {:#}",
-                candidate.display(),
-                e
-            );
+            eprintln!("warning: failed to parse {}: {:#}", candidate.display(), e);
             Config::default()
         }),
         Err(_) => Config::default(),
@@ -147,7 +139,10 @@ fn run(args: Args) -> Result<bool> {
         .with_context(|| format!("parsing {}", args.map_file.display()))?;
 
     // For GNU ld / ESP-IDF: load GCC IPA call graph dumps to enable depth analysis
-    if matches!(map_data.format, map::MapFormat::GnuLd | map::MapFormat::EspIdf) {
+    if matches!(
+        map_data.format,
+        map::MapFormat::GnuLd | map::MapFormat::EspIdf
+    ) {
         let cgraph_dir_refs: Vec<&std::path::Path> =
             args.cgraph_dirs.iter().map(|p| p.as_path()).collect();
         let mut cgraph_paths = cgraph::collect_cgraph_files(&cgraph_dir_refs, &exclude_dirs);
@@ -180,7 +175,13 @@ fn run(args: Args) -> Result<bool> {
     );
 
     match args.format {
-        OutputFormat::Text => print_text(&result, args.verbose, top_n, stack_threshold, depth_threshold),
+        OutputFormat::Text => print_text(
+            &result,
+            args.verbose,
+            top_n,
+            stack_threshold,
+            depth_threshold,
+        ),
         OutputFormat::Json => print_json(&result)?,
     }
 
@@ -306,10 +307,7 @@ fn print_text(
         println!("{}", "-".repeat(60));
 
         let unknown_suffix = if r.max_chain_has_unknown {
-            format!(
-                " + Unknown({})",
-                r.max_chain_unknown_factors.join(", ")
-            )
+            format!(" + Unknown({})", r.max_chain_unknown_factors.join(", "))
         } else {
             String::new()
         };
@@ -346,7 +344,11 @@ fn print_text(
             println!("  Deepest call chain:");
             for (i, (name, frame)) in r.max_chain.iter().enumerate() {
                 let indent = "  ".repeat(i + 1);
-                let arrow = if i + 1 < r.max_chain.len() { " →" } else { "" };
+                let arrow = if i + 1 < r.max_chain.len() {
+                    " →"
+                } else {
+                    ""
+                };
                 println!("    {}{} [{} bytes]{}", indent, name, frame, arrow);
             }
         }

@@ -9,9 +9,7 @@ static CHAIN_ENTRY_RE: OnceLock<Regex> = OnceLock::new();
 static SYMBOL_RE: OnceLock<Regex> = OnceLock::new();
 
 fn max_stack_re() -> &'static Regex {
-    MAX_STACK_RE.get_or_init(|| {
-        Regex::new(r"Maximum Stack Usage\s*=\s*(\d+)\s+bytes(.*)").unwrap()
-    })
+    MAX_STACK_RE.get_or_init(|| Regex::new(r"Maximum Stack Usage\s*=\s*(\d+)\s+bytes(.*)").unwrap())
 }
 
 fn chain_entry_re() -> &'static Regex {
@@ -23,7 +21,10 @@ fn chain_entry_re() -> &'static Regex {
 fn symbol_re() -> &'static Regex {
     SYMBOL_RE.get_or_init(|| {
         // "    funcName        0x08001234   Thumb Code     48  file.o(section)"
-        Regex::new(r"^\s+([a-zA-Z_][a-zA-Z0-9_:.$@<>~]*)\s+(0x[0-9a-fA-F]+)\s+\S+\s+\S+\s+(\d+)\s+(.+)$").unwrap()
+        Regex::new(
+            r"^\s+([a-zA-Z_][a-zA-Z0-9_:.$@<>~]*)\s+(0x[0-9a-fA-F]+)\s+\S+\s+\S+\s+(\d+)\s+(.+)$",
+        )
+        .unwrap()
     })
 }
 

@@ -83,8 +83,9 @@ pub fn detect_format(content: &str, hint: Option<&str>) -> MapFormat {
 
     if content.contains("ARM Linker")
         || content.contains("armlink")
-        || (content.contains("==============================================================================")
-            && content.contains("Image Symbol Table"))
+        || (content.contains(
+            "==============================================================================",
+        ) && content.contains("Image Symbol Table"))
     {
         return MapFormat::ArmKeil;
     }

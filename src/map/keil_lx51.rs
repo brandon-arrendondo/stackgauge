@@ -13,33 +13,31 @@ static PAGE_HEADER_RE: OnceLock<Regex> = OnceLock::new();
 fn func_entry_re() -> &'static Regex {
     FUNC_ENTRY_RE.get_or_init(|| {
         // FUNC_NAME/MODULE    XXXXH YYYYH   or   FUNC_NAME/MODULE    ----- -----
-        Regex::new(r"^([A-Z0-9_?][A-Z0-9_?./]*)\s+([0-9A-F]{4}H|-----)\s+([0-9A-F]{4}H|-----)\s*$").unwrap()
+        Regex::new(r"^([A-Z0-9_?][A-Z0-9_?./]*)\s+([0-9A-F]{4}H|-----)\s+([0-9A-F]{4}H|-----)\s*$")
+            .unwrap()
     })
 }
 
 fn func_trunc_re() -> &'static Regex {
     FUNC_TRUNC_RE.get_or_init(|| {
         // Truncated name ends with +, then addresses
-        Regex::new(r"^([A-Z0-9_?][A-Z0-9_?./]*)\+\s+([0-9A-F]{4}H|-----)\s+([0-9A-F]{4}H|-----)\s*$").unwrap()
+        Regex::new(
+            r"^([A-Z0-9_?][A-Z0-9_?./]*)\+\s+([0-9A-F]{4}H|-----)\s+([0-9A-F]{4}H|-----)\s*$",
+        )
+        .unwrap()
     })
 }
 
 fn continuation_re() -> &'static Regex {
-    CONTINUATION_RE.get_or_init(|| {
-        Regex::new(r"^\.\.\. ([A-Z0-9_?./]*)$").unwrap()
-    })
+    CONTINUATION_RE.get_or_init(|| Regex::new(r"^\.\.\. ([A-Z0-9_?./]*)$").unwrap())
 }
 
 fn callee_re() -> &'static Regex {
-    CALLEE_RE.get_or_init(|| {
-        Regex::new(r"^\s+\+-->\s+([A-Z0-9_?][A-Z0-9_?./]*)$").unwrap()
-    })
+    CALLEE_RE.get_or_init(|| Regex::new(r"^\s+\+-->\s+([A-Z0-9_?][A-Z0-9_?./]*)$").unwrap())
 }
 
 fn page_header_re() -> &'static Regex {
-    PAGE_HEADER_RE.get_or_init(|| {
-        Regex::new(r"^LX51 LINKER/LOCATER").unwrap()
-    })
+    PAGE_HEADER_RE.get_or_init(|| Regex::new(r"^LX51 LINKER/LOCATER").unwrap())
 }
 
 fn parse_addr(s: &str) -> Option<u64> {

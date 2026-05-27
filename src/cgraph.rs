@@ -287,7 +287,12 @@ mod tests {
         let graph = parse_cgraph(&content);
         // main(32) → process_data(256) → deep_leaf(64) = 352
         // main(32) → helper(16)                         =  48
-        let frames = su(&[("main", 32), ("process_data", 256), ("helper", 16), ("deep_leaf", 64)]);
+        let frames = su(&[
+            ("main", 32),
+            ("process_data", 256),
+            ("helper", 16),
+            ("deep_leaf", 64),
+        ]);
         let ms = build_max_stack(&graph, &frames).unwrap();
         assert_eq!(ms.bytes, 352);
         assert_eq!(ms.chain.len(), 3);
@@ -300,7 +305,12 @@ mod tests {
     fn test_build_max_stack_bytes_matches_chain_sum() {
         let content = std::fs::read_to_string("tests/fixtures/sample.cgraph").unwrap();
         let graph = parse_cgraph(&content);
-        let frames = su(&[("main", 32), ("process_data", 256), ("helper", 16), ("deep_leaf", 64)]);
+        let frames = su(&[
+            ("main", 32),
+            ("process_data", 256),
+            ("helper", 16),
+            ("deep_leaf", 64),
+        ]);
         let ms = build_max_stack(&graph, &frames).unwrap();
         let total: u64 = ms.chain.iter().map(|e| e.frame_size).sum();
         assert_eq!(total, ms.bytes);

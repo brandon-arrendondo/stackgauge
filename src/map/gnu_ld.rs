@@ -7,14 +7,16 @@ static SYMBOL_RE: OnceLock<Regex> = OnceLock::new();
 static SECTION_RE: OnceLock<Regex> = OnceLock::new();
 
 fn symbol_re() -> &'static Regex {
-    SYMBOL_RE.get_or_init(|| {
-        Regex::new(r"^\s+(0x[0-9a-fA-F]+)\s+([a-zA-Z_][a-zA-Z0-9_.$@]*)$").unwrap()
-    })
+    SYMBOL_RE
+        .get_or_init(|| Regex::new(r"^\s+(0x[0-9a-fA-F]+)\s+([a-zA-Z_][a-zA-Z0-9_.$@]*)$").unwrap())
 }
 
 fn section_re() -> &'static Regex {
     SECTION_RE.get_or_init(|| {
-        Regex::new(r"^\s+(\.[a-zA-Z_][a-zA-Z0-9_.$@]*)\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(.+)$").unwrap()
+        Regex::new(
+            r"^\s+(\.[a-zA-Z_][a-zA-Z0-9_.$@]*)\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(.+)$",
+        )
+        .unwrap()
     })
 }
 
@@ -100,7 +102,13 @@ mod tests {
         let content = std::fs::read_to_string("tests/fixtures/sample.map").unwrap();
         let result = parse(&content, MapFormat::GnuLd).unwrap();
         let names: Vec<&str> = result.symbols.iter().map(|s| s.name.as_str()).collect();
-        for expected in &["_Vectors", "Reset_Handler", "main", "process_data", "helper"] {
+        for expected in &[
+            "_Vectors",
+            "Reset_Handler",
+            "main",
+            "process_data",
+            "helper",
+        ] {
             assert!(names.contains(expected), "missing symbol '{expected}'");
         }
     }
@@ -123,9 +131,15 @@ mod tests {
         let result = parse(&content, MapFormat::GnuLd).unwrap();
         let s = &result.symbols;
         assert_eq!(sym(s, "_Vectors").object_file.as_deref(), Some("startup.o"));
-        assert_eq!(sym(s, "Reset_Handler").object_file.as_deref(), Some("startup.o"));
+        assert_eq!(
+            sym(s, "Reset_Handler").object_file.as_deref(),
+            Some("startup.o")
+        );
         assert_eq!(sym(s, "main").object_file.as_deref(), Some("main.o"));
-        assert_eq!(sym(s, "process_data").object_file.as_deref(), Some("utils.o"));
+        assert_eq!(
+            sym(s, "process_data").object_file.as_deref(),
+            Some("utils.o")
+        );
         assert_eq!(sym(s, "helper").object_file.as_deref(), Some("utils.o"));
     }
 
@@ -148,7 +162,11 @@ mod tests {
                 0x0000000000001000                foo
 "#;
         let result = parse(content, MapFormat::GnuLd).unwrap();
-        assert_eq!(result.symbols.len(), 1, "duplicate (name, addr) should collapse to one");
+        assert_eq!(
+            result.symbols.len(),
+            1,
+            "duplicate (name, addr) should collapse to one"
+        );
     }
 
     #[test]
