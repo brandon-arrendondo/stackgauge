@@ -269,12 +269,8 @@ fn print_text(
             };
 
             println!(
-                "  {} {:<col_w$} {} ({} : {})",
-                flag,
-                func.name,
-                size_colored,
-                func.frame_type,
-                format!("{}:{}", func.source_file, func.line),
+                "  {} {:<col_w$} {} ({} : {}:{})",
+                flag, func.name, size_colored, func.frame_type, func.source_file, func.line,
             );
         }
 
