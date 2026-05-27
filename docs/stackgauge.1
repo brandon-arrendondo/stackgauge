@@ -1,0 +1,161 @@
+.TH STACKGAUGE 1 "2025" "stackgauge" "User Commands"
+.SH NAME
+stackgauge \- static stack depth analysis for embedded firmware
+.SH SYNOPSIS
+.B stackgauge
+[\fIOPTIONS\fR] \fIMAP_FILE\fR
+.SH DESCRIPTION
+.B stackgauge
+parses linker map files and GCC
+.I .su
+stack-usage files to report per-function frame sizes and, where call-graph
+data is available, worst-case cumulative stack depth.
+.PP
+Designed to run as a pre-commit hook so stack overflows are caught before
+they reach hardware.
+.PP
+Supported toolchains: GCC + GNU ld, ARM/Keil MDK (armlink), and
+ESP-IDF (Xtensa/GCC). The map format is auto-detected unless overridden
+with
+.BR \-\-toolchain .
+.SH ARGUMENTS
+.TP
+.I MAP_FILE
+Linker map file to analyse.
+.SH OPTIONS
+.TP
+.BR \-s ", " \-\-su\-dir " " \fIDIR\fR
+Search
+.I DIR
+recursively for
+.I .su
+files. Repeatable.
+.TP
+.B \-\-su\-file \fIFILE\fR
+Add a single
+.I .su
+file explicitly. Repeatable.
+.TP
+.B \-\-cgraph\-dir \fIDIR\fR
+Search
+.I DIR
+recursively for
+.I *.cgraph
+dumps. Repeatable.
+.TP
+.B \-\-cgraph\-file \fIFILE\fR
+Add a single
+.I .cgraph
+file explicitly. Repeatable.
+.TP
+.B \-\-exclude\-dir \fINAME\fR
+Skip directories named
+.I NAME
+during
+.I .su
+/
+.I .cgraph
+search. Repeatable. CompilerIdC, CompilerIdCXX, and CompilerIdASM are
+excluded by default.
+.TP
+.BR \-t ", " \-\-stack\-threshold " " \fIN\fR
+Fail (exit 1) if worst-case stack exceeds
+.I N
+bytes.
+.TP
+.B \-\-depth\-threshold \fIN\fR
+Fail (exit 1) if call depth exceeds
+.I N
+(ARM/Keil or GNU ld + cgraph).
+.TP
+.B \-\-top\-n \fIN\fR
+Number of functions to show in the report (default: 10). See also
+.BR \-v .
+.TP
+.BR \-v ", " \-\-verbose
+Show all functions, not just the top N.
+.TP
+.BR \-f ", " \-\-format " " \fIfmt\fR
+Output format:
+.B text
+(default) or
+.BR json .
+.TP
+.B \-\-toolchain \fIname\fR
+Force map format:
+.BR gnu\-ld " | " arm\-keil " | " esp\-idf .
+.TP
+.BR \-c ", " \-\-config " " \fIFILE\fR
+Config file (default:
+.IR stackgauge.toml ).
+CLI flags always override config values.
+.TP
+.BR \-h ", " \-\-help
+Print help.
+.TP
+.BR \-V ", " \-\-version
+Print version.
+.SH EXIT STATUS
+.TP
+.B 0
+All thresholds passed (or no thresholds set).
+.TP
+.B 1
+A stack or depth threshold was exceeded.
+.TP
+.B 2
+Fatal error (missing file, parse failure, etc.).
+.SH CONFIGURATION FILE
+Place a
+.I stackgauge.toml
+in your project root or pass
+.B \-c
+to specify a path. CLI flags take precedence over config values.
+.PP
+Example:
+.PP
+.nf
+stack_threshold = 2048
+depth_threshold = 12
+top_n = 20
+su_dirs = ["build/CMakeFiles", "build"]
+# toolchain = "gnu-ld"
+.fi
+.SH EXAMPLES
+.TP
+Report top-10 largest frames (GNU ld):
+.B stackgauge build/firmware.map --su-dir build/
+.TP
+With worst-case depth analysis:
+.B stackgauge build/firmware.map --su-dir build/ --cgraph-dir build/
+.TP
+Fail if stack > 2 KB or depth > 12:
+.B stackgauge build/firmware.map --su-dir build/ --stack-threshold 2048 --depth-threshold 12
+.TP
+JSON output:
+.B stackgauge firmware.map --su-dir build/ --format json | jq .call_graph
+.TP
+ARM/Keil (call graph is embedded in the map):
+.B stackgauge build/firmware.map
+.SH PRE-COMMIT INTEGRATION
+Add to
+.I .pre-commit-config.yaml:
+.PP
+.nf
+repos:
+  - repo: local
+    hooks:
+      - id: stackgauge
+        name: Stack depth analysis
+        language: system
+        entry: stackgauge
+        args: [build/firmware.map, --su-dir=build/]
+        pass_filenames: false
+.fi
+.SH SEE ALSO
+.BR gcc (1),
+.BR ld (1)
+.SH AUTHOR
+Brandon Arrendondo <brandon@arrendondo.dev>
+.SH LICENSE
+MIT

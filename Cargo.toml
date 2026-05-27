@@ -24,3 +24,26 @@ regex = "1.10"
 lto = true
 codegen-units = 1
 strip = true
+
+[package.metadata.deb]
+maintainer = "Brandon Arrendondo <brandon@arrendondo.dev>"
+section = "devel"
+priority = "optional"
+assets = [
+  ["target/release/stackgauge", "usr/bin/", "755"],
+  ["docs/stackgauge.1", "usr/share/man/man1/", "644"],
+  ["stackgauge.toml", "usr/share/doc/stackgauge/stackgauge.toml.example", "644"],
+  ["README.md", "usr/share/doc/stackgauge/", "644"],
+  ["THIRD_PARTY_LICENSES.txt", "usr/share/doc/stackgauge/", "644"],
+  ["stackgauge.cdx.json", "usr/share/doc/stackgauge/", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+  { source = "target/release/stackgauge", dest = "/usr/bin/stackgauge", mode = "755" },
+  { source = "docs/stackgauge.1", dest = "/usr/share/man/man1/stackgauge.1", mode = "644" },
+  { source = "stackgauge.toml", dest = "/usr/share/doc/stackgauge/stackgauge.toml.example", mode = "644" },
+  { source = "README.md", dest = "/usr/share/doc/stackgauge/README.md", mode = "644" },
+  { source = "THIRD_PARTY_LICENSES.txt", dest = "/usr/share/doc/stackgauge/THIRD_PARTY_LICENSES.txt", mode = "644" },
+  { source = "stackgauge.cdx.json", dest = "/usr/share/doc/stackgauge/stackgauge.cdx.json", mode = "644" },
+]
