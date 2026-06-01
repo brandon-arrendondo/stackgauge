@@ -16,6 +16,7 @@ they reach hardware.
 | GCC + GNU ld | auto-detected | `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
 | ARM/Keil MDK (armlink) | auto-detected | `.su` files | Native (built into map) |
 | ESP-IDF (Xtensa/GCC) | auto-detected | `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
+| Rust + lld | auto-detected or `--elf` | DWARF `.debug_frame` via `--elf` | not yet supported |
 
 ---
 
@@ -259,6 +260,65 @@ frame-type annotations (static vs dynamic):
 ```bash
 stackgauge build/firmware.map
 stackgauge build/firmware.map --su-dir build/  # with .su annotations
+```
+
+### Rust / lld
+
+Rust firmware built with `lto = true` (the default for release profiles) does
+not emit per-function symbols in the linker map — all functions are merged
+during link-time optimisation.  Use `--elf` instead to read stack frame sizes
+directly from DWARF `.debug_frame`, which lld always emits when debug info is
+present.
+
+**Requirement**: the release profile must keep DWARF data:
+
+```toml
+# Cargo.toml
+[profile.release]
+lto = true
+debug = 2   # preserve full DWARF; use "line-tables-only" for a smaller binary
+```
+
+**Usage**:
+
+```bash
+stackgauge --elf target/thumbv8m.base-none-eabi/release/firmware \
+    --stack-threshold 2048
+```
+
+No map file is needed.  If you want map-based symbol filtering, provide both:
+
+```bash
+stackgauge target/thumbv8m.base-none-eabi/release/firmware.map \
+    --elf target/thumbv8m.base-none-eabi/release/firmware \
+    --stack-threshold 2048
+```
+
+Function names are automatically demangled using `rustc-demangle`; the raw
+`DW_AT_linkage_name` Rust symbol (e.g. `_ZN8firmware4main17h…E`) is
+converted to the human-readable form (e.g. `firmware::main`).
+
+**Pre-commit hook for Rust projects**:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: stackgauge
+        name: Stack depth analysis (Rust)
+        language: system
+        entry: stackgauge
+        args:
+          - --elf=target/thumbv8m.base-none-eabi/release/firmware
+          - --stack-threshold=2048
+        pass_filenames: false
+```
+
+Or via `stackgauge.toml`:
+
+```toml
+elf_path = "target/thumbv8m.base-none-eabi/release/firmware"
+stack_threshold = 2048
 ```
 
 ### ESP-IDF (Xtensa/GCC)

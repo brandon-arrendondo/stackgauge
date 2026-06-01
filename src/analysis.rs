@@ -113,7 +113,7 @@ pub fn run(
             }
         }
 
-        MapFormat::GnuLd | MapFormat::EspIdf => {
+        MapFormat::GnuLd | MapFormat::EspIdf | MapFormat::RustLld => {
             // Build set of symbol names from map for filtering
             let map_symbols: std::collections::HashSet<&str> =
                 map.symbols.iter().map(|s| s.name.as_str()).collect();

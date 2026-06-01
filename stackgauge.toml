@@ -19,4 +19,7 @@
 # exclude_dirs = ["CompilerIdC", "my_other_probe_dir"]
 
 # Force a specific map file format (auto-detected by default).
-# toolchain = "gnu-ld"  # gnu-ld | arm-keil | esp-idf
+# toolchain = "gnu-ld"  # gnu-ld | arm-keil | esp-idf | rust-lld
+
+# For Rust/lld builds: path to the ELF file (replaces --su-dir)
+# elf_path = "target/thumbv8m.base-none-eabi/release/firmware"

@@ -12,4 +12,6 @@ pub struct Config {
     pub exclude_dirs: Vec<String>,
     pub format: Option<String>,
     pub toolchain: Option<String>,
+    /// Path to an ELF file for Rust/lld DWARF-based stack analysis.
+    pub elf_path: Option<String>,
 }

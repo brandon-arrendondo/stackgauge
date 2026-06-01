@@ -1,6 +1,7 @@
 pub mod arm_keil;
 pub mod gnu_ld;
 pub mod keil_lx51;
+pub mod lld;
 
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -11,6 +12,7 @@ pub enum MapFormat {
     ArmKeil,
     EspIdf,
     KeilC51,
+    RustLld,
 }
 
 impl std::fmt::Display for MapFormat {
@@ -20,6 +22,7 @@ impl std::fmt::Display for MapFormat {
             MapFormat::ArmKeil => write!(f, "ARM/Keil MDK"),
             MapFormat::EspIdf => write!(f, "ESP-IDF (Xtensa/GNU ld)"),
             MapFormat::KeilC51 => write!(f, "Keil C51/LX51 (8051)"),
+            MapFormat::RustLld => write!(f, "Rust/lld"),
         }
     }
 }
@@ -73,6 +76,7 @@ pub fn detect_format(content: &str, hint: Option<&str>) -> MapFormat {
             "gnu-ld" | "gnu_ld" | "gnu" => return MapFormat::GnuLd,
             "esp-idf" | "esp_idf" | "esp32" | "xtensa" => return MapFormat::EspIdf,
             "keil-c51" | "keil_c51" | "c51" | "lx51" | "8051" => return MapFormat::KeilC51,
+            "rust-lld" | "rust_lld" | "lld" => return MapFormat::RustLld,
             _ => {}
         }
     }
@@ -94,6 +98,20 @@ pub fn detect_format(content: &str, hint: Option<&str>) -> MapFormat {
         return MapFormat::EspIdf;
     }
 
+    // lld format: first non-empty line contains all of these column headers
+    if let Some(first) = content.lines().find(|l| !l.trim().is_empty()) {
+        if first.contains("VMA")
+            && first.contains("LMA")
+            && first.contains("Size")
+            && first.contains("Align")
+            && first.contains("Out")
+            && first.contains("In")
+            && first.contains("Symbol")
+        {
+            return MapFormat::RustLld;
+        }
+    }
+
     MapFormat::GnuLd
 }
 
@@ -107,5 +125,6 @@ pub fn parse_map(path: &Path, hint: Option<&str>) -> Result<MapData> {
         MapFormat::ArmKeil => arm_keil::parse(&content, format),
         MapFormat::GnuLd | MapFormat::EspIdf => gnu_ld::parse(&content, format),
         MapFormat::KeilC51 => keil_lx51::parse(&content, format),
+        MapFormat::RustLld => lld::parse(&content, format),
     }
 }

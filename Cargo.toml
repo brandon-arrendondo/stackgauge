@@ -19,6 +19,9 @@ toml = "0.8"
 walkdir = "2.4"
 colored = "2.0"
 regex = "1.10"
+gimli = "0.31"
+object = { version = "0.36", features = ["read"] }
+rustc-demangle = "0.1"
 
 [profile.release]
 lto = true

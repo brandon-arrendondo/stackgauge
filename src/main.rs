@@ -1,6 +1,7 @@
 mod analysis;
 mod cgraph;
 mod config;
+mod elf;
 mod map;
 mod su;
 
@@ -20,9 +21,12 @@ enum OutputFormat {
 
 /// Static stack depth analysis for embedded system map files.
 ///
-/// Parses GNU ld, ESP-IDF (Xtensa), and ARM/Keil linker map files together
-/// with GCC .su (stack usage) files to report per-function frame sizes and,
-/// where call-graph data is available, worst-case cumulative stack depth.
+/// Parses GNU ld, ESP-IDF (Xtensa), ARM/Keil, and Rust/lld linker map files
+/// together with GCC .su (stack usage) files to report per-function frame sizes
+/// and, where call-graph data is available, worst-case cumulative stack depth.
+///
+/// For Rust/lld builds pass --elf instead of (or in addition to) a map file.
+/// stackgauge will read stack frame sizes directly from DWARF .debug_frame.
 ///
 /// Exit codes:
 ///   0  all metrics within threshold
@@ -31,8 +35,13 @@ enum OutputFormat {
 #[derive(Parser, Debug)]
 #[command(version, args_override_self = true, verbatim_doc_comment)]
 struct Args {
-    /// Map file to analyze
-    map_file: PathBuf,
+    /// Map file to analyze (optional when --elf is provided)
+    #[arg(required = false)]
+    map_file: Option<PathBuf>,
+
+    /// ELF file to read DWARF .debug_frame stack sizes from (Rust/lld)
+    #[arg(long = "elf", value_name = "FILE")]
+    elf: Option<PathBuf>,
 
     /// Directory to search recursively for .su files (repeatable)
     #[arg(short = 's', long = "su-dir", value_name = "DIR")]
@@ -100,6 +109,17 @@ fn load_config(path: Option<&PathBuf>) -> Config {
 fn run(args: Args) -> Result<bool> {
     let cfg = load_config(args.config.as_ref());
 
+    // Resolve ELF path: CLI takes precedence over config file
+    let elf_path: Option<PathBuf> = args
+        .elf
+        .clone()
+        .or_else(|| cfg.elf_path.as_deref().map(PathBuf::from));
+
+    // Validate: need at least one of --elf or MAP_FILE
+    if elf_path.is_none() && args.map_file.is_none() {
+        anyhow::bail!("one of --elf <FILE> or MAP_FILE is required");
+    }
+
     // Merge thresholds: CLI overrides config file
     let stack_threshold = args.stack_threshold.or(cfg.stack_threshold);
     let depth_threshold = args.depth_threshold.or(cfg.depth_threshold);
@@ -119,24 +139,49 @@ fn run(args: Args) -> Result<bool> {
         }
     }
 
-    // Resolve .su search directories from CLI + config
-    let mut su_dirs: Vec<PathBuf> = args.su_dirs.clone();
-    for d in &cfg.su_dirs {
-        su_dirs.push(PathBuf::from(d));
-    }
+    // Determine su entries + su file count
+    // When --elf is provided: read frames from DWARF; .su dirs are ignored
+    // When no --elf: use .su files as before
+    let (su_entries, su_file_count, _elf_mode) = if let Some(ref ep) = elf_path {
+        let entries =
+            elf::parse_elf_frames(ep).with_context(|| format!("parsing ELF {}", ep.display()))?;
+        let count = entries.len();
+        (entries, count, true)
+    } else {
+        // Resolve .su search directories from CLI + config
+        let mut su_dirs: Vec<PathBuf> = args.su_dirs.clone();
+        for d in &cfg.su_dirs {
+            su_dirs.push(PathBuf::from(d));
+        }
+        let dir_refs: Vec<&std::path::Path> = su_dirs.iter().map(|p| p.as_path()).collect();
+        let mut su_file_paths: Vec<PathBuf> = su::collect_su_files(&dir_refs, &exclude_dirs);
+        su_file_paths.extend(args.su_files.iter().cloned());
+        let count = su_file_paths.len();
+        let entries = su::load_su_entries(&su_file_paths);
+        (entries, count, false)
+    };
 
-    // Collect .su files
-    let dir_refs: Vec<&std::path::Path> = su_dirs.iter().map(|p| p.as_path()).collect();
-    let mut su_file_paths: Vec<PathBuf> = su::collect_su_files(&dir_refs, &exclude_dirs);
-    su_file_paths.extend(args.su_files.iter().cloned());
-    let su_file_count = su_file_paths.len();
-    let su_entries = su::load_su_entries(&su_file_paths);
-
-    // Parse map file
+    // Parse map file (or synthesise a dummy for --elf-only mode)
     let toolchain_hint = args.toolchain.as_deref().or(cfg.toolchain.as_deref());
 
-    let mut map_data = map::parse_map(&args.map_file, toolchain_hint)
-        .with_context(|| format!("parsing {}", args.map_file.display()))?;
+    let (mut map_data, map_label) = if let Some(ref mf) = args.map_file {
+        let data = map::parse_map(mf, toolchain_hint)
+            .with_context(|| format!("parsing {}", mf.display()))?;
+        let label = mf.display().to_string();
+        (data, label)
+    } else {
+        // ELF-only mode: dummy MapData with empty symbols so analysis includes all entries
+        let dummy = map::MapData {
+            format: map::MapFormat::RustLld,
+            symbols: vec![],
+            max_stack: None,
+        };
+        let label = elf_path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        (dummy, label)
+    };
 
     // For GNU ld / ESP-IDF: load GCC IPA call graph dumps to enable depth analysis
     if matches!(
@@ -167,7 +212,7 @@ fn run(args: Args) -> Result<bool> {
         &map_data,
         &su_entries,
         su_file_count,
-        &args.map_file.display().to_string(),
+        &map_label,
         &AnalysisConfig {
             stack_threshold,
             depth_threshold,
@@ -181,6 +226,7 @@ fn run(args: Args) -> Result<bool> {
             top_n,
             stack_threshold,
             depth_threshold,
+            elf_path.as_deref(),
         ),
         OutputFormat::Json => print_json(&result)?,
     }
@@ -212,15 +258,22 @@ fn print_text(
     top_n: usize,
     stack_threshold: Option<u64>,
     depth_threshold: Option<usize>,
+    elf_path: Option<&std::path::Path>,
 ) {
     println!("stackgauge analysis");
     println!("{}", "=".repeat(60));
-    println!("  Map file  : {}", r.map_file);
-    println!("  Format    : {}", r.format);
-    println!(
-        "  SU files  : {} files, {} functions",
-        r.su_file_count, r.su_function_count
-    );
+    if let Some(ep) = elf_path {
+        println!("  ELF file  : {}", ep.display());
+        println!("  Format    : {}", r.format);
+        println!("  Functions : {} from DWARF", r.su_function_count);
+    } else {
+        println!("  Map file  : {}", r.map_file);
+        println!("  Format    : {}", r.format);
+        println!(
+            "  SU files  : {} files, {} functions",
+            r.su_file_count, r.su_function_count
+        );
+    }
 
     if let Some(t) = stack_threshold {
         println!("  Stack thr : {} bytes", t);
