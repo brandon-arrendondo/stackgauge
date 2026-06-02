@@ -16,7 +16,7 @@ they reach hardware.
 | GCC + GNU ld | auto-detected | `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
 | ARM/Keil MDK (armlink) | auto-detected | `.su` files | Native (built into map) |
 | ESP-IDF (Xtensa/GCC) | auto-detected | `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
-| Rust + lld | auto-detected or `--elf` | DWARF `.debug_frame` via `--elf` | not yet supported |
+| Rust + lld | auto-detected or `--elf` | Thumb-2 instruction scan via `--elf` | not yet supported |
 
 ---
 
@@ -266,9 +266,15 @@ stackgauge build/firmware.map --su-dir build/  # with .su annotations
 
 Rust firmware built with `lto = true` (the default for release profiles) does
 not emit per-function symbols in the linker map — all functions are merged
-during link-time optimisation.  Use `--elf` instead to read stack frame sizes
-directly from DWARF `.debug_frame`, which lld always emits when debug info is
-present.
+during link-time optimisation.  Use `--elf` instead: stackgauge reads
+`DW_TAG_subprogram` entries from `.debug_info` to get function names and
+address ranges, then scans the corresponding `.text` bytes for ARM Thumb-2
+PUSH and SUB SP instructions to compute the actual frame size.
+
+This instruction-scan approach is used instead of the DWARF CFA (`.debug_frame`)
+because LLVM anchors the CFA to the frame pointer (`r7`) on Cortex-M targets,
+making SUB SP allocations that occur after `ADD r7, sp, #0` invisible to the
+unwind tables.
 
 **Requirement**: the release profile must keep DWARF data:
 
