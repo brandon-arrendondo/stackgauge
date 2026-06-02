@@ -138,7 +138,7 @@ pub fn parse(content: &str, format: MapFormat) -> Result<MapData> {
         }
     }
 
-    symbols.sort_by(|a, b| a.address.cmp(&b.address));
+    symbols.sort_by_key(|a| a.address);
 
     Ok(MapData {
         format,

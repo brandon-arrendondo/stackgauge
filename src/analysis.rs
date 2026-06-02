@@ -145,7 +145,7 @@ pub fn run(
         }
     }
 
-    functions.sort_by(|a, b| b.frame_size.cmp(&a.frame_size));
+    functions.sort_by_key(|b| std::cmp::Reverse(b.frame_size));
 
     // Extract call graph analysis from ARM/Keil map
     let (max_chain_bytes, max_chain_depth, max_chain, has_unknown, unknown_factors) =

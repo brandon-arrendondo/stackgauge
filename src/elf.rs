@@ -69,7 +69,7 @@ pub fn parse_elf_frames(path: &Path) -> Result<Vec<SuEntry>> {
         });
     }
 
-    entries.sort_by(|a, b| b.frame_size.cmp(&a.frame_size));
+    entries.sort_by_key(|b| std::cmp::Reverse(b.frame_size));
 
     Ok(entries)
 }
