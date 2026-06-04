@@ -15,7 +15,7 @@ they reach hardware.
 |-----------|-----------|--------------------|--------------------|
 | GCC + GNU ld | auto-detected | `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
 | ARM/Keil MDK (armlink) | auto-detected | `.su` files | Native (built into map) |
-| ESP-IDF (Xtensa/GCC) | auto-detected | `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
+| ESP-IDF (Xtensa/GCC) | auto-detected | `--elf` (recommended) or `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
 | Rust + lld | auto-detected or `--elf` | Thumb-2 instruction scan via `--elf` | not yet supported |
 
 ---
@@ -329,23 +329,90 @@ stack_threshold = 2048
 
 ### ESP-IDF (Xtensa/GCC)
 
-Same as GNU ld. Add to your component's `CMakeLists.txt`:
+ESP32 targets use the Xtensa LX windowed-register ABI. Every non-leaf
+function begins with an `ENTRY a1, N` instruction that allocates exactly N
+bytes of stack frame. stackgauge reads that instruction directly from the
+ELF, so no special compiler flags are needed.
 
-```cmake
-idf_component_register(...)
-target_compile_options(${COMPONENT_LIB} PRIVATE
-    -fstack-usage
-    -fdump-ipa-cgraph
-)
-```
-
-Then run from your project root after `idf.py build`:
+#### Recommended: `--elf` (no build changes required)
 
 ```bash
-stackgauge build/project.map \
-    --su-dir    build/ \
-    --cgraph-dir build/
+stackgauge --elf build/firmware.elf
 ```
+
+This gives complete coverage across your application code and all ESP-IDF
+library functions — including functions placed in IRAM with `IRAM_ATTR`,
+which the map + `.su` approach cannot recover.
+
+**Requirement**: the binary must retain DWARF debug info. In ESP-IDF this
+means `CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE` must not strip
+symbols, and the default `idf.py build` (without `--no-debug`) is fine.
+
+```bash
+# Top-10 worst frames
+stackgauge --elf build/firmware.elf
+
+# All functions
+stackgauge --elf build/firmware.elf -v
+
+# Fail CI if any single frame exceeds 512 bytes
+stackgauge --elf build/firmware.elf --stack-threshold 512
+```
+
+#### Alternative: map + `.su` (scoped to your code, with source locations)
+
+If you want source file and line numbers rather than just function names,
+add `-fstack-usage` to the components you own. In your component's
+`CMakeLists.txt`, after `idf_component_register(...)`:
+
+```cmake
+target_compile_options(${COMPONENT_LIB} PRIVATE -fstack-usage)
+```
+
+To instrument all ESP-IDF components (larger rebuild, broader coverage),
+add to the root `CMakeLists.txt` between `include(...)` and `project()`:
+
+```cmake
+idf_build_set_property(COMPILE_OPTIONS "-fstack-usage" APPEND)
+```
+
+After `idf.py build`, `.su` files land alongside `.obj` files under
+`build/esp-idf/<component>/CMakeFiles/`. Point stackgauge at the build
+directory:
+
+```bash
+stackgauge build/firmware.map --su-dir build/
+```
+
+**Known gaps with this approach**:
+- Functions marked `IRAM_ATTR` are placed in a generic `.iram1.0` section
+  with no function name embedded — they will be absent from the output.
+- Functions that the linker inlines away are present in `.su` files
+  (compiled) but have no symbol in the final binary — also absent.
+- Only files compiled with `-fstack-usage` appear; ESP-IDF library
+  functions are excluded unless you instrument all components.
+
+#### FreeRTOS and per-task stack budgets
+
+ESP-IDF uses FreeRTOS, so there is no single shared stack. Each task has
+its own independently allocated stack, and overflow is per-task. stackgauge
+reports per-function frame sizes — to use those numbers you need to:
+
+1. Identify the entry function of each task (passed to `xTaskCreate`).
+2. Trace the worst-case call chain from that entry point through the
+   function table.
+3. Sum the frame sizes along the chain.
+4. Compare the total against the stack size configured in `xTaskCreate`
+   (stack size is in words; multiply by 4 for bytes on Xtensa).
+
+The interrupt stack is separate from all task stacks. Any function reachable
+from an ISR (including `IRAM_ATTR` handlers) must fit within the interrupt
+stack budget, which is configured via `CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE`
+and related Kconfig options.
+
+The `--elf` output is the most useful starting point: it lists all functions
+sorted by frame size, so you can quickly identify the largest consumers and
+check which task contexts they appear in.
 
 ---
 
