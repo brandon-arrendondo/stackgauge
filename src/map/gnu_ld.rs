@@ -39,8 +39,28 @@ pub fn parse(content: &str, format: MapFormat) -> Result<MapData> {
         // One-line section: " .text.main  0x...  0x...  file.o"
         if let Some(caps) = section_re().captures(line) {
             current_section = caps[1].to_string();
-            current_obj = Some(caps[4].trim().to_string());
+            let obj_str = caps[4].trim().to_string();
+            current_obj = Some(obj_str.clone());
             pending_section = None;
+
+            // Synthesize a symbol for static functions that won't get an explicit
+            // symbol line (same logic as the two-line path below).
+            if let Some(func_name) = current_section.strip_prefix(".text.") {
+                if !func_name.is_empty()
+                    && func_name.chars().all(|c| c.is_alphanumeric() || c == '_')
+                {
+                    let address = u64::from_str_radix(&caps[2][2..], 16).unwrap_or(0);
+                    if address > 0 {
+                        symbols.push(Symbol {
+                            name: func_name.to_string(),
+                            address,
+                            size: 0,
+                            section: current_section.clone(),
+                            object_file: Some(obj_str),
+                        });
+                    }
+                }
+            }
             continue;
         }
 
@@ -77,8 +97,31 @@ pub fn parse(content: &str, format: MapFormat) -> Result<MapData> {
                 // Reject "size before relaxing" annotation lines.
                 if !obj_str.starts_with('(') {
                     current_section = sec_name.clone();
-                    current_obj = Some(obj_str);
+                    current_obj = Some(obj_str.clone());
                     pending_section = None;
+
+                    // Synthesize a symbol for static functions: GCC emits a
+                    // .text.funcname section per function but only writes an
+                    // explicit symbol line for globally-visible functions.
+                    // Extract the name from ".text.funcname" so static functions
+                    // are visible in the analysis cross-reference.
+                    if let Some(func_name) = sec_name.strip_prefix(".text.") {
+                        if !func_name.is_empty()
+                            && func_name.chars().all(|c| c.is_alphanumeric() || c == '_')
+                        {
+                            let addr_str = &caps[1];
+                            let address = u64::from_str_radix(&addr_str[2..], 16).unwrap_or(0);
+                            if address > 0 {
+                                symbols.push(Symbol {
+                                    name: func_name.to_string(),
+                                    address,
+                                    size: 0,
+                                    section: sec_name.clone(),
+                                    object_file: Some(obj_str),
+                                });
+                            }
+                        }
+                    }
                     continue;
                 }
             }
@@ -277,6 +320,7 @@ mod tests {
     #[test]
     fn test_esp_idf_fill_and_wildcard_lines_skipped() {
         // *fill* and *(...) lines must not disrupt section/symbol tracking.
+        // Both foo (static, synthesized) and bar (global, explicit) should appear.
         let content = r#" .text.foo
                 0x42000100       0x10 libfoo.a(foo.c.obj)
  *fill*         0x42000110        0x2
@@ -286,7 +330,9 @@ mod tests {
 "#;
         let result = parse(content, MapFormat::EspIdf).unwrap();
         let s = &result.symbols;
-        assert_eq!(s.len(), 1);
+        assert_eq!(s.len(), 2);
+        assert_eq!(sym(s, "foo").section, ".text.foo");
+        assert_eq!(sym(s, "foo").address, 0x42000100);
         assert_eq!(sym(s, "bar").section, ".text.bar");
     }
 }
