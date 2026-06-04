@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 
 static SYMBOL_RE: OnceLock<Regex> = OnceLock::new();
 static SECTION_RE: OnceLock<Regex> = OnceLock::new();
+static SECTION_BODY_RE: OnceLock<Regex> = OnceLock::new();
 
 fn symbol_re() -> &'static Regex {
     SYMBOL_RE
@@ -20,29 +21,69 @@ fn section_re() -> &'static Regex {
     })
 }
 
+// ESP-IDF / multi-line format: "   0xADDR   0xSIZE   object_file"
+// Appears on the line immediately after a bare section-name line.
+fn section_body_re() -> &'static Regex {
+    SECTION_BODY_RE
+        .get_or_init(|| Regex::new(r"^\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(\S+.*)$").unwrap())
+}
+
 pub fn parse(content: &str, format: MapFormat) -> Result<MapData> {
     let mut symbols: Vec<Symbol> = Vec::new();
     let mut current_section = String::new();
     let mut current_obj: Option<String> = None;
+    // Holds a section name seen alone on its own line (ESP-IDF two-line format).
+    let mut pending_section: Option<String> = None;
 
     for line in content.lines() {
-        // Track current section context: lines like " .text.main  0x... 0x... file.o"
+        // One-line section: " .text.main  0x...  0x...  file.o"
         if let Some(caps) = section_re().captures(line) {
             current_section = caps[1].to_string();
             current_obj = Some(caps[4].trim().to_string());
+            pending_section = None;
             continue;
         }
 
-        // Bare section address lines: "  .text  0x00001234  0x5678"  (no object file)
-        // These set the section but don't update the object
         let trimmed = line.trim();
+
+        // Lines starting with '*' are linker wildcards / fill directives — skip.
+        if trimmed.starts_with('*') {
+            pending_section = None;
+            continue;
+        }
+
         if trimmed.starts_with('.') {
             let parts: Vec<&str> = trimmed.split_ascii_whitespace().collect();
             if parts.len() >= 2 && parts[1].starts_with("0x") {
+                // Bare one-line section with address but no object file.
                 current_section = parts[0].to_string();
                 current_obj = None;
+                pending_section = None;
+            } else if parts.len() == 1 {
+                // Section name alone on its line (ESP-IDF two-line format).
+                // The next body line carries address, size, and object file.
+                pending_section = Some(parts[0].to_string());
+            } else {
+                pending_section = None;
             }
             continue;
+        }
+
+        // Two-line section body: "   0xADDR   0xSIZE   object_file"
+        // Only consume this as a section header when we have a pending name.
+        if let Some(ref sec_name) = pending_section.clone() {
+            if let Some(caps) = section_body_re().captures(line) {
+                let obj_str = caps[3].trim().to_string();
+                // Reject "size before relaxing" annotation lines.
+                if !obj_str.starts_with('(') {
+                    current_section = sec_name.clone();
+                    current_obj = Some(obj_str);
+                    pending_section = None;
+                    continue;
+                }
+            }
+            // Any non-body line cancels the pending section.
+            pending_section = None;
         }
 
         // Symbol definition: "                0x000001234                symbol_name"
@@ -50,7 +91,7 @@ pub fn parse(content: &str, format: MapFormat) -> Result<MapData> {
             let addr_str = &caps[1];
             let name = caps[2].to_string();
 
-            // Skip linker-generated symbols that are not real functions
+            // Skip linker-generated boundary symbols.
             if name.starts_with("__") && (name.ends_with("_start") || name.ends_with("_end")) {
                 continue;
             }
@@ -60,7 +101,7 @@ pub fn parse(content: &str, format: MapFormat) -> Result<MapData> {
             symbols.push(Symbol {
                 name,
                 address,
-                size: 0, // GNU ld doesn't give per-symbol sizes inline
+                size: 0,
                 section: current_section.clone(),
                 object_file: current_obj.clone(),
             });
@@ -201,5 +242,51 @@ mod tests {
         let bare = sym(s, "from_bare");
         assert_eq!(bare.section, ".text");
         assert!(bare.object_file.is_none());
+    }
+
+    #[test]
+    fn test_esp_idf_two_line_section_format() {
+        // ESP-IDF map: section name on its own line, address/size/obj on the next.
+        let content = r#" .text.app_main
+                0x42007b1c       0xb2 esp-idf/src/libsrc.a(main.c.obj)
+                                 0xc6 (size before relaxing)
+                0x42007b1c                app_main
+ .text.PID_init
+                0x42007bd0       0x12 esp-idf/src/libsrc.a(cmd_pump.c.obj)
+                0x42007bd0                PID_init
+"#;
+        let result = parse(content, MapFormat::EspIdf).unwrap();
+        let s = &result.symbols;
+        assert_eq!(s.len(), 2);
+        let main = sym(s, "app_main");
+        assert_eq!(main.address, 0x42007b1c);
+        assert_eq!(main.section, ".text.app_main");
+        assert_eq!(
+            main.object_file.as_deref(),
+            Some("esp-idf/src/libsrc.a(main.c.obj)")
+        );
+        let pid = sym(s, "PID_init");
+        assert_eq!(pid.address, 0x42007bd0);
+        assert_eq!(pid.section, ".text.PID_init");
+        assert_eq!(
+            pid.object_file.as_deref(),
+            Some("esp-idf/src/libsrc.a(cmd_pump.c.obj)")
+        );
+    }
+
+    #[test]
+    fn test_esp_idf_fill_and_wildcard_lines_skipped() {
+        // *fill* and *(...) lines must not disrupt section/symbol tracking.
+        let content = r#" .text.foo
+                0x42000100       0x10 libfoo.a(foo.c.obj)
+ *fill*         0x42000110        0x2
+ .text.bar
+                0x42000112        0x8 libbar.a(bar.c.obj)
+                0x42000112                bar
+"#;
+        let result = parse(content, MapFormat::EspIdf).unwrap();
+        let s = &result.symbols;
+        assert_eq!(s.len(), 1);
+        assert_eq!(sym(s, "bar").section, ".text.bar");
     }
 }

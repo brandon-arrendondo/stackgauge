@@ -1,15 +1,15 @@
 use crate::su::{FrameType, SuEntry};
 use anyhow::{Context, Result};
 use gimli::RunTimeEndian;
-use object::{Object, ObjectSection};
+use object::{Architecture, Object, ObjectSection, SectionKind};
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Parse an ELF file's DWARF `.debug_info` and `.text` sections to extract
-/// per-function stack frame sizes for ARM Thumb-2 targets.
+/// Parse an ELF file's DWARF `.debug_info` and code sections to extract
+/// per-function stack frame sizes.
 ///
-/// Frame size = bytes pushed by PUSH instructions + bytes allocated by SUB SP.
-/// Names are demangled with `rustc-demangle`.
+/// Supports ARM Thumb-2 and Xtensa LX (ESP32) targets. ISA is detected from
+/// the ELF e_machine field. Names are demangled with `rustc-demangle`.
 pub fn parse_elf_frames(path: &Path) -> Result<Vec<SuEntry>> {
     let data =
         std::fs::read(path).with_context(|| format!("failed to read ELF: {}", path.display()))?;
@@ -23,16 +23,34 @@ pub fn parse_elf_frames(path: &Path) -> Result<Vec<SuEntry>> {
         RunTimeEndian::Big
     };
 
+    let is_xtensa = obj.architecture() == Architecture::Xtensa;
+
     // Build address → (mangled_name, func_len) map from .debug_info
     let name_map = build_name_map(&obj, endian)?;
 
-    // Load .text section bytes for instruction scanning
-    let text_section = obj.section_by_name(".text");
-    let text_base = text_section.as_ref().map(|s| s.address()).unwrap_or(0);
-    let text_bytes: Vec<u8> = text_section
-        .and_then(|s| s.data().ok())
-        .map(|d| d.to_vec())
-        .unwrap_or_default();
+    // Load all executable sections so we can resolve any function address.
+    // ESP32 splits code across .flash.text / .iram0.text / etc.; ARM typically
+    // puts everything in .text, but multi-section scanning works for both.
+    let code_sections: Vec<(u64, Vec<u8>)> = obj
+        .sections()
+        .filter(|s| matches!(s.kind(), SectionKind::Text) && s.size() > 0)
+        .filter_map(|s| s.data().ok().map(|d| (s.address(), d.to_vec())))
+        .collect();
+
+    // Fallback: if no sections matched above, try the named .text section.
+    let fallback: Vec<(u64, Vec<u8>)> = if code_sections.is_empty() {
+        obj.section_by_name(".text")
+            .and_then(|s| s.data().ok().map(|d| (s.address(), d.to_vec())))
+            .into_iter()
+            .collect()
+    } else {
+        vec![]
+    };
+    let sections: &[(u64, Vec<u8>)] = if code_sections.is_empty() {
+        &fallback
+    } else {
+        &code_sections
+    };
 
     let mut entries = Vec::new();
 
@@ -41,19 +59,26 @@ pub fn parse_elf_frames(path: &Path) -> Result<Vec<SuEntry>> {
             continue;
         }
 
-        // Mask the Thumb bit (bit 0) that some toolchains set in symbol addresses
+        // Mask the Thumb bit (bit 0) that ARM toolchains set in symbol addresses.
         let code_addr = addr & !1;
-        if text_bytes.is_empty() || code_addr < text_base {
-            continue;
-        }
-        let offset = (code_addr - text_base) as usize;
-        if offset >= text_bytes.len() {
-            continue;
-        }
-        let end = (offset + *func_len as usize).min(text_bytes.len());
-        let func_bytes = &text_bytes[offset..end];
 
-        let frame_size = parse_thumb2_frame_size(func_bytes);
+        let Some((sec_base, sec_bytes)) = find_section(sections, code_addr) else {
+            continue;
+        };
+
+        let offset = (code_addr - sec_base) as usize;
+        let end = (offset + *func_len as usize).min(sec_bytes.len());
+        if offset >= sec_bytes.len() {
+            continue;
+        }
+        let func_bytes = &sec_bytes[offset..end];
+
+        let frame_size = if is_xtensa {
+            parse_xtensa_entry_frame_size(func_bytes)
+        } else {
+            parse_thumb2_frame_size(func_bytes)
+        };
+
         if frame_size == 0 {
             continue;
         }
@@ -72,6 +97,14 @@ pub fn parse_elf_frames(path: &Path) -> Result<Vec<SuEntry>> {
     entries.sort_by_key(|b| std::cmp::Reverse(b.frame_size));
 
     Ok(entries)
+}
+
+/// Find the code section that contains `addr`, returning (section_base, section_bytes).
+fn find_section(sections: &[(u64, Vec<u8>)], addr: u64) -> Option<(u64, &[u8])> {
+    sections
+        .iter()
+        .find(|(base, data)| addr >= *base && addr < base + data.len() as u64)
+        .map(|(base, data)| (*base, data.as_slice()))
 }
 
 /// Build a map from function start address → (linkage_name, length) using `.debug_info`.
@@ -138,6 +171,32 @@ fn build_name_map(
     Ok(name_map)
 }
 
+/// Extract the Xtensa LX stack frame size from the function's first ENTRY instruction.
+///
+/// Xtensa windowed-call ABI: every non-leaf function starts with:
+///   ENTRY a1, imm12*8
+/// 24-bit little-endian encoding:
+///   byte 0 = 0x36 (op0=6 CALL, op1=3 ENTRY)
+///   byte 1 = (imm12[3:0] << 4) | s   where s=1 for a1 (sp)
+///   byte 2 = imm12[11:4]
+///   frame  = imm12 * 8
+///
+/// Returns 0 for leaf functions that omit ENTRY.
+fn parse_xtensa_entry_frame_size(bytes: &[u8]) -> u64 {
+    if bytes.len() < 3 {
+        return 0;
+    }
+    let b0 = bytes[0];
+    let b1 = bytes[1];
+    let b2 = bytes[2];
+    // Require ENTRY using a1 (sp): byte0=0x36, low nibble of byte1=0x1
+    if b0 != 0x36 || (b1 & 0x0F) != 0x01 {
+        return 0;
+    }
+    let imm12 = ((b2 as u64) << 4) | ((b1 as u64) >> 4);
+    imm12 * 8
+}
+
 /// Compute the stack frame size for an ARM Thumb-2 function by scanning its bytes.
 ///
 /// Sums bytes consumed by:
@@ -178,7 +237,7 @@ fn parse_thumb2_frame_size(bytes: &[u8]) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_elf_frames, parse_thumb2_frame_size};
+    use super::{parse_elf_frames, parse_thumb2_frame_size, parse_xtensa_entry_frame_size};
     use std::path::Path;
 
     #[test]
@@ -245,5 +304,54 @@ mod tests {
     #[test]
     fn test_empty_function_gives_zero() {
         assert_eq!(parse_thumb2_frame_size(&[]), 0);
+    }
+
+    // ── Xtensa ENTRY tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_xtensa_entry_32_bytes() {
+        // ENTRY a1, 32 → bytes 36 41 00 (imm12=4, frame=4*8=32)
+        let bytes = [0x36u8, 0x41, 0x00];
+        assert_eq!(parse_xtensa_entry_frame_size(&bytes), 32);
+    }
+
+    #[test]
+    fn test_xtensa_entry_64_bytes() {
+        // ENTRY a1, 64 → bytes 36 81 00 (imm12=8, frame=64)
+        let bytes = [0x36u8, 0x81, 0x00];
+        assert_eq!(parse_xtensa_entry_frame_size(&bytes), 64);
+    }
+
+    #[test]
+    fn test_xtensa_entry_384_bytes() {
+        // ENTRY a1, 0x180=384 → bytes 36 01 03 (imm12=0x30=48, frame=48*8=384)
+        let bytes = [0x36u8, 0x01, 0x03];
+        assert_eq!(parse_xtensa_entry_frame_size(&bytes), 384);
+    }
+
+    #[test]
+    fn test_xtensa_entry_48_bytes() {
+        // ENTRY a1, 48 → bytes 36 61 00 (imm12=6, frame=48)
+        let bytes = [0x36u8, 0x61, 0x00];
+        assert_eq!(parse_xtensa_entry_frame_size(&bytes), 48);
+    }
+
+    #[test]
+    fn test_xtensa_leaf_no_entry() {
+        // Leaf function — first byte is not 0x36, frame = 0
+        let bytes = [0x0cu8, 0x08, 0x00];
+        assert_eq!(parse_xtensa_entry_frame_size(&bytes), 0);
+    }
+
+    #[test]
+    fn test_xtensa_entry_wrong_register() {
+        // byte1 low nibble != 1 (not a1) — not a frame-allocating ENTRY for sp
+        let bytes = [0x36u8, 0x42, 0x00];
+        assert_eq!(parse_xtensa_entry_frame_size(&bytes), 0);
+    }
+
+    #[test]
+    fn test_xtensa_entry_too_short() {
+        assert_eq!(parse_xtensa_entry_frame_size(&[0x36, 0x41]), 0);
     }
 }
