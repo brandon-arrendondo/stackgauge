@@ -1,3 +1,5 @@
 /target
 .todo-sqlite-cli
 *.db
+/todo-sqlite-cli.db
+/scripts/__pycache__/
