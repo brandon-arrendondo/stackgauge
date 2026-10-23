@@ -23,7 +23,7 @@ enum OutputFormat {
 ///
 /// Parses GNU ld, ESP-IDF (Xtensa), ARM/Keil, and Rust/lld linker map files
 /// together with GCC .su (stack usage) files to report per-function frame sizes
-/// and, where call-graph data is available, worst-case cumulative stack depth.
+/// and, where call-graph data is available, reported cumulative stack usage and chain depth.
 ///
 /// For Rust/lld builds pass --elf instead of (or in addition to) a map file.
 /// DWARF .debug_info supplies function names and ranges; instruction scans supply frame sizes.
