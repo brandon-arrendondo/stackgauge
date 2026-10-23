@@ -3,7 +3,7 @@ name = "stackgauge"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-authors = ["BISSELL Homecare, Inc."]
+authors = ["Brandon Arrendondo <brandon.arrendondo@bissell.com>"]
 description = "Static stack depth analysis for embedded system map files"
 
 [[bin]]

@@ -49,15 +49,9 @@ output, `--top-n N` for a longer table, or `-v` for all frames.
 
 ## AI Assistance
 
-Stackgauge was developed with assistance from [Claude](https://claude.ai)
-(Anthropic) for implementation, tests and project setup. From October 2026,
-[Codex](https://openai.com/codex/) (OpenAI) also contributed the agent and
-commit guideline tooling and documentation. Brandon Arrendondo is the
-accountable BISSELL Associate responsible for review and publication.
+Stackgauge was developed with assistance from [Claude](https://claude.ai) (Anthropic), used for implementation, tests, bug fixes, and project setup. From October 2026, [Codex](https://openai.com/codex/) (OpenAI) also contributed the tooling that enforces the agent and commit guidelines, and documentation. Each of its changes was reviewed before it was merged.
 
-Many earlier commits carry AI co-author trailers, but those trailers are not
-a complete record of AI assistance. From October 2026, assistance is
-acknowledged once here rather than through per-commit AI trailers.
+Many earlier commits have a `Co-Authored-By: Claude` trailer, but not every AI-assisted commit does, so the trailers are not a complete record. From October 2026 the contribution is acknowledged once, here, and not with a co-author trailer on each commit.
 
 ## License
 
