@@ -1,16 +1,19 @@
 # stackgauge — developer notes
 
+@AGENTS.md
+
+See [development](docs/development.md) and the [ADR index](docs/adr/README.md).
+
 ## Build & test
 
 ```bash
 cargo build --release        # binary at target/release/stackgauge
-cargo test                   # unit + integration tests
+cargo test --all-targets     # all compiled test targets
 cargo clippy -- -D warnings  # lint (CI enforces this)
 cargo fmt                    # formatter (pre-commit hook runs this automatically)
 ```
 
-Pre-commit hooks are active (`pre-commit install` already done). `cargo fmt`
-runs on every commit; don't bypass with `--no-verify`.
+Install the hooks with `pre-commit install`.
 
 ## Architecture
 
@@ -25,7 +28,7 @@ src/
   map/
     mod.rs         MapData / Symbol types, format detection, parser dispatch
     gnu_ld.rs      GNU ld map parser
-    arm_keil.rs    ARM/Keil armlink map parser (call graph embedded)
+    arm_keil.rs    ARM/Keil text parser (recognized call graph in same input)
     keil_lx51.rs   Keil C51/LX51 (8051) map parser
     lld.rs         Rust/lld map parser (symbols sparse due to LTO)
 ```
@@ -51,8 +54,8 @@ Scans the full function body for prologue instructions:
 
 **Why not `.debug_frame` / DWARF CFA?**  LLVM sets the CFA base to `r7`
 (frame pointer) on Cortex-M, so SUB SP allocations after `ADD r7, sp, #0`
-are invisible in the unwind tables. Instruction scanning gives correct
-results where CFA gives zero.
+are invisible in the unwind tables. Instruction scanning detects selected allocation forms where CFA can give zero;
+it does not establish a complete bound.
 
 ### Xtensa LX (ESP32 / ESP-IDF)
 
@@ -66,10 +69,11 @@ only — no full-body scan needed.
 - byte 2 = `imm12[11:4]`
 - frame size = `imm12 * 8`
 
-Leaf functions that omit ENTRY have no local frame and report 0 bytes.
+The scanner returns zero for functions without ENTRY; zero-frame entries
+are omitted from the report.
 
 **Requirement**: binary must include `.debug_info` (compiled with
-`debug = 2` or at least `debug = 1`; strip must be off).
+`debug = 2`; strip must be off).
 
 ## ESP-IDF map + `.su` path
 
