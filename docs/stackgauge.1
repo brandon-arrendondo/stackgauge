@@ -1,9 +1,9 @@
-.TH STACKGAUGE 1 "2025" "stackgauge" "User Commands"
+.TH STACKGAUGE 1 "2026" "stackgauge" "User Commands"
 .SH NAME
 stackgauge \- static stack depth analysis for embedded firmware
 .SH SYNOPSIS
 .B stackgauge
-[\fIOPTIONS\fR] \fIMAP_FILE\fR
+[\fIOPTIONS\fR] [\fIMAP_FILE\fR]
 .SH DESCRIPTION
 .B stackgauge
 parses linker map files and GCC
@@ -15,14 +15,18 @@ Designed to run as a pre-commit hook so stack overflows are caught before
 they reach hardware.
 .PP
 Supported toolchains: GCC + GNU ld, ARM/Keil MDK (armlink), and
-ESP-IDF (Xtensa/GCC). The map format is auto-detected unless overridden
+ESP-IDF (Xtensa/GCC), Keil C51/LX51 and Rust/lld. The map format is auto-detected unless overridden
 with
 .BR \-\-toolchain .
 .SH ARGUMENTS
 .TP
 .I MAP_FILE
-Linker map file to analyse.
+Linker map file to analyse. Required unless an ELF path is supplied by CLI or config.
 .SH OPTIONS
+.TP
+.B \-\-elf \fIFILE\fR
+Read DWARF .debug_info function ranges and scan ARM Thumb or Xtensa instruction
+bytes for frame sizes. Replaces .su inputs; does not provide an ELF-only call graph.
 .TP
 .BR \-s ", " \-\-su\-dir " " \fIDIR\fR
 Search
@@ -83,12 +87,12 @@ Output format:
 .TP
 .B \-\-toolchain \fIname\fR
 Force map format:
-.BR gnu\-ld " | " arm\-keil " | " esp\-idf .
+.BR gnu\-ld " | " arm\-keil " | " esp\-idf " | " keil\-c51 " | " rust\-lld .
 .TP
 .BR \-c ", " \-\-config " " \fIFILE\fR
 Config file (default:
 .IR stackgauge.toml ).
-CLI flags always override config values.
+CLI scalar values override config values; search and exclusion lists combine.
 .TP
 .BR \-h ", " \-\-help
 Print help.
@@ -98,7 +102,8 @@ Print version.
 .SH EXIT STATUS
 .TP
 .B 0
-All thresholds passed (or no thresholds set).
+No threshold exceeded by available data (or no thresholds set). Missing or
+incomplete data can currently return success; this is not proof of a complete bound.
 .TP
 .B 1
 A stack or depth threshold was exceeded.
@@ -135,7 +140,7 @@ Fail if stack > 2 KB or depth > 12:
 JSON output:
 .B stackgauge firmware.map --su-dir build/ --format json | jq .call_graph
 .TP
-ARM/Keil (call graph is embedded in the map):
+ARM/Keil text input (recognized call-graph sections must be in the same file):
 .B stackgauge build/firmware.map
 .SH PRE-COMMIT INTEGRATION
 Add to
@@ -156,6 +161,10 @@ repos:
 .BR gcc (1),
 .BR ld (1)
 .SH AUTHOR
-Brandon Arrendondo <brandon@arrendondo.dev>
+Brandon Arrendondo
+.SH LIMITATIONS
+Armlink separate .htm/.txt reports are not automatically discovered or parsed as HTML.
+Indirect calls, missing frames and unknown components can leave lower bounds.
+ELF scans recognize selected instructions and omit zero or unrecognized frames.
 .SH LICENSE
-MIT
+MIT. Copyright 2026 BISSELL Homecare, Inc.

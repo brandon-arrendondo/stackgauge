@@ -26,10 +26,10 @@ enum OutputFormat {
 /// and, where call-graph data is available, worst-case cumulative stack depth.
 ///
 /// For Rust/lld builds pass --elf instead of (or in addition to) a map file.
-/// stackgauge will read stack frame sizes directly from DWARF .debug_frame.
+/// stackgauge will read stack frame sizes directly from DWARF .debug_info and instruction bytes.
 ///
 /// Exit codes:
-///   0  all metrics within threshold
+///   0  no threshold exceeded by available data (which may be incomplete)
 ///   1  threshold exceeded (pre-commit fails here)
 ///   2  fatal error (parse failure, missing file, etc.)
 #[derive(Parser, Debug)]
@@ -39,7 +39,7 @@ struct Args {
     #[arg(required = false)]
     map_file: Option<PathBuf>,
 
-    /// ELF file to read DWARF .debug_frame stack sizes from (Rust/lld)
+    /// ELF file with DWARF .debug_info and ARM Thumb or Xtensa code
     #[arg(long = "elf", value_name = "FILE")]
     elf: Option<PathBuf>,
 
@@ -59,11 +59,11 @@ struct Args {
     #[arg(long = "cgraph-file", value_name = "FILE")]
     cgraph_files: Vec<PathBuf>,
 
-    /// Fail if worst-case stack exceeds this many bytes
+    /// Fail if reported chain or largest frame exceeds this many bytes
     #[arg(short = 't', long, value_name = "BYTES")]
     stack_threshold: Option<u64>,
 
-    /// Fail if call depth exceeds this count (ARM/Keil call graph only)
+    /// Fail if reported call-chain depth exceeds this count
     #[arg(long, value_name = "N")]
     depth_threshold: Option<usize>,
 

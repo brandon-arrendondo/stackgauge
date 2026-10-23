@@ -1,456 +1,64 @@
 # stackgauge
 
-Static stack depth analysis for embedded firmware. Parses linker map
-files and GCC `.su` stack-usage files to report per-function frame sizes
-and, where call-graph data is available, worst-case cumulative stack depth.
+Static stack analysis for embedded firmware. Reads linker maps, GCC stack
+usage and call-graph dumps, or ELF/DWARF plus instruction bytes to report
+per-function frames and, where available, cumulative chains.
 
-Designed to run as a pre-commit hook so stack overflows are caught before
-they reach hardware.
-
----
-
-## Supported toolchains
-
-| Toolchain | Map format | Per-function frames | Call graph / depth |
-|-----------|-----------|--------------------|--------------------|
-| GCC + GNU ld | auto-detected | `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
-| ARM/Keil MDK (armlink) | auto-detected | `.su` files | Native (built into map) |
-| ESP-IDF (Xtensa/GCC) | auto-detected | `--elf` (recommended) or `.su` files (`-fstack-usage`) | `.cgraph` files (`-fdump-ipa-cgraph`) |
-| Rust + lld | auto-detected or `--elf` | Thumb-2 instruction scan via `--elf` | not yet supported |
-
----
-
-## Installation
-
-```bash
-cargo install --path .
-```
-
-Or build and copy the binary to somewhere on `$PATH`:
-
-```bash
-cargo build --release
-cp target/release/stackgauge ~/.local/bin/
-```
-
----
-
-## Quick start
-
-```bash
-# GNU ld — report top-10 largest frames
-stackgauge build/firmware.map --su-dir build/
-
-# GNU ld — with depth analysis via call graph
+```sh
+cargo install --path . --locked
 stackgauge build/firmware.map --su-dir build/ --cgraph-dir build/
-
-# ARM/Keil — call graph is embedded in the map file
-stackgauge build/firmware.map --su-dir build/
-
-# Fail if worst-case stack > 2 KB or call depth > 12
-stackgauge build/firmware.map --su-dir build/ \
-    --stack-threshold 2048 \
-    --depth-threshold 12
+stackgauge --elf build/firmware.elf --stack-threshold 2048
 ```
 
-Exit codes: **0** = pass, **1** = threshold exceeded, **2** = fatal error.
-
----
-
-## Usage
-
-```
-stackgauge [OPTIONS] <MAP_FILE>
-
-Arguments:
-  <MAP_FILE>    Linker map file to analyse
-
-Options:
-  -s, --su-dir <DIR>          Search DIR recursively for .su files (repeatable)
-      --su-file <FILE>        Add a single .su file explicitly (repeatable)
-      --cgraph-dir <DIR>      Search DIR recursively for *.cgraph dumps (repeatable)
-      --cgraph-file <FILE>    Add a single .cgraph file explicitly (repeatable)
-      --exclude-dir <NAME>   Skip directories named NAME during .su / .cgraph search (repeatable)
-  -t, --stack-threshold <N>  Fail if worst-case stack exceeds N bytes
-      --depth-threshold <N>  Fail if call depth exceeds N (ARM/Keil or cgraph)
-      --top-n <N>            Functions to show (default 10; see also -v)
-  -v, --verbose              Show all functions, not just top N
-  -f, --format <fmt>         Output format: text (default) or json
-      --toolchain <name>     Force format: gnu-ld | arm-keil | esp-idf
-  -c, --config <FILE>        Config file (default: stackgauge.toml)
-  -h, --help                 Print help
-  -V, --version              Print version
-```
-
-### Examples
-
-```bash
-# Show top 20 instead of default 10
-stackgauge firmware.map --su-dir build/ --top-n 20
-
-# Show every function
-stackgauge firmware.map --su-dir build/ -v
-
-# JSON output (useful for CI dashboards)
-stackgauge firmware.map --su-dir build/ --format json | jq .call_graph
-
-# Force ARM/Keil format when auto-detection fails
-stackgauge build/firmware.map --toolchain arm-keil
-
-# Mix explicit files and directory search
-stackgauge firmware.map \
-    --su-file build/src/main.c.su \
-    --su-dir  build/lib/
-```
-
----
-
-## Configuration file
-
-Place a `stackgauge.toml` in your project root (or pass `-c path/to/file`).
-CLI flags always override config values.
-
-```toml
-# stackgauge.toml
-
-# Fail if worst-case stack exceeds this many bytes
-stack_threshold = 2048
-
-# Directory names to exclude from .su / .cgraph search.
-# CompilerIdC, CompilerIdCXX, CompilerIdASM are excluded by default.
-# exclude_dirs = ["my_probe_dir"]
-
-# Fail if call depth exceeds this (ARM/Keil or GNU ld + cgraph)
-depth_threshold = 12
-
-# Default number of functions to show
-top_n = 20
-
-# Directories to search for .su files (relative to cwd)
-su_dirs = ["build/CMakeFiles", "build"]
-
-# Force toolchain format: "gnu-ld" | "arm-keil" | "esp-idf"
-# toolchain = "gnu-ld"
-```
-
----
-
-## Toolchain notes
-
-### GCC / GNU ld
-
-Add to your `CFLAGS` (or CMake `target_compile_options`):
-
-```cmake
-target_compile_options(${PROJECT_NAME} PRIVATE
-    -fstack-usage        # generates *.su alongside *.o
-    -fdump-ipa-cgraph    # generates *.cgraph for depth analysis
-)
-```
-
-GCC writes files next to the object files:
-
-```
-build/CMakeFiles/myproject.dir/src/
-    main.c.o
-    main.c.su           ← per-function frame sizes
-    main.c.001i.cgraph  ← call graph dump
-```
-
-Point stackgauge at the build directory and it finds them recursively:
-
-```bash
-stackgauge build/myproject.map \
-    --su-dir    build/ \
-    --cgraph-dir build/
-```
-
-Without `--cgraph-dir`, you get per-function frame sizes but no
-cumulative depth analysis. Add it once your build supports
-`-fdump-ipa-cgraph`.
-
-#### Worked example: CMake ARM GCC project
-
-This walks through enabling cgraph on a real Cortex-M23 project
-(`d_leo_main`, GD32C231K8T6, 2 KB stack budget). The same steps apply to
-any CMake + ARM GCC build.
-
-**Step 1 — edit `app/CMakeLists.txt`**
-
-Locate the `target_compile_options` call for your main target and add the
-two flags:
-
-```cmake
-target_compile_options(d_leo_main PRIVATE
-    # ... existing flags ...
-    -fstack-usage
-    -fdump-ipa-cgraph
-)
-```
-
-**Step 2 — rebuild**
-
-```bash
-cmake --build build/Debug
-```
-
-GCC writes one `.su` and one `.cgraph` file per translation unit, placed
-next to each `.o` in the CMake object directory:
-
-```
-build/Debug/CMakeFiles/d_leo_main.dir/app/src/
-    main.c.o
-    main.c.su
-    main.c.001i.cgraph
-build/Debug/CMakeFiles/d_leo_main.dir/app/src/lin/
-    lin_bg.c.o
-    lin_bg.c.su
-    lin_bg.c.001i.cgraph
-```
-
-**Step 3 — run stackgauge**
-
-```bash
-stackgauge build/Debug/d_leo_main.map \
-    --su-dir     build/Debug/CMakeFiles/d_leo_main.dir \
-    --cgraph-dir build/Debug/CMakeFiles/d_leo_main.dir \
-    --stack-threshold 2048
-```
-
-If you already ran stackgauge before adding cgraph support (`.su` files
-present, no `.cgraph` files), the output will include per-function frame
-sizes but report no depth. Re-running after the rebuild with `--cgraph-dir`
-adds worst-case depth to every chain that cgraph can see.
-
-#### Indirect calls and function pointers
-
-`-fdump-ipa-cgraph` only captures static call edges that GCC can see at
-compile time. Calls through function pointers are absent from the dump, so
-any call chain that crosses them will have its depth silently
-underestimated.
-
-For `d_leo_main` two edges are not captured by cgraph:
-
-| Caller | Callee | Reason |
-|--------|--------|--------|
-| `lin_bg_publish_response` | `main_Status_serialize` | function pointer dispatch |
-| `lin_bg_handle_frame_complete` | `ui_Status_deserialize` | function pointer dispatch |
-
-Workaround: write a hand-crafted `.cgraph` snippet that describes those
-edges and pass it with `--cgraph-file`:
-
-```bash
-stackgauge build/Debug/d_leo_main.map \
-    --su-dir     build/Debug/CMakeFiles/d_leo_main.dir \
-    --cgraph-dir build/Debug/CMakeFiles/d_leo_main.dir \
-    --cgraph-file extra_edges.cgraph \
-    --stack-threshold 2048
-```
-
-The `.cgraph` format mirrors GCC's output; the parser accepts partial
-files, so you only need to list the missing edges.
-
-### ARM/Keil MDK (armlink)
-
-The Keil map file already contains a symbol table and a call graph with
-the worst-case stack calculation. No extra compiler flags are needed — just
-point stackgauge at the `.map` file. Optionally add `.su` files for
-frame-type annotations (static vs dynamic):
-
-```bash
-stackgauge build/firmware.map
-stackgauge build/firmware.map --su-dir build/  # with .su annotations
-```
-
-### Rust / lld
-
-Rust firmware built with `lto = true` (the default for release profiles) does
-not emit per-function symbols in the linker map — all functions are merged
-during link-time optimisation.  Use `--elf` instead: stackgauge reads
-`DW_TAG_subprogram` entries from `.debug_info` to get function names and
-address ranges, then scans the corresponding `.text` bytes for ARM Thumb-2
-PUSH and SUB SP instructions to compute the actual frame size.
-
-This instruction-scan approach is used instead of the DWARF CFA (`.debug_frame`)
-because LLVM anchors the CFA to the frame pointer (`r7`) on Cortex-M targets,
-making SUB SP allocations that occur after `ADD r7, sp, #0` invisible to the
-unwind tables.
-
-**Requirement**: the release profile must keep DWARF data:
-
-```toml
-# Cargo.toml
-[profile.release]
-lto = true
-debug = 2   # preserve full DWARF; use "line-tables-only" for a smaller binary
-```
-
-**Usage**:
-
-```bash
-stackgauge --elf target/thumbv8m.base-none-eabi/release/firmware \
-    --stack-threshold 2048
-```
-
-No map file is needed.  If you want map-based symbol filtering, provide both:
-
-```bash
-stackgauge target/thumbv8m.base-none-eabi/release/firmware.map \
-    --elf target/thumbv8m.base-none-eabi/release/firmware \
-    --stack-threshold 2048
-```
-
-Function names are automatically demangled using `rustc-demangle`; the raw
-`DW_AT_linkage_name` Rust symbol (e.g. `_ZN8firmware4main17h…E`) is
-converted to the human-readable form (e.g. `firmware::main`).
-
-**Pre-commit hook for Rust projects**:
-
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: stackgauge
-        name: Stack depth analysis (Rust)
-        language: system
-        entry: stackgauge
-        args:
-          - --elf=target/thumbv8m.base-none-eabi/release/firmware
-          - --stack-threshold=2048
-        pass_filenames: false
-```
-
-Or via `stackgauge.toml`:
-
-```toml
-elf_path = "target/thumbv8m.base-none-eabi/release/firmware"
-stack_threshold = 2048
-```
-
-### ESP-IDF (Xtensa/GCC)
-
-ESP32 targets use the Xtensa LX windowed-register ABI. Every non-leaf
-function begins with an `ENTRY a1, N` instruction that allocates exactly N
-bytes of stack frame. stackgauge reads that instruction directly from the
-ELF, so no special compiler flags are needed.
-
-#### Recommended: `--elf` (no build changes required)
-
-```bash
-stackgauge --elf build/firmware.elf
-```
-
-This gives complete coverage across your application code and all ESP-IDF
-library functions — including functions placed in IRAM with `IRAM_ATTR`,
-which the map + `.su` approach cannot recover.
-
-**Requirement**: the binary must retain DWARF debug info. In ESP-IDF this
-means `CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE` must not strip
-symbols, and the default `idf.py build` (without `--no-debug`) is fine.
-
-```bash
-# Top-10 worst frames
-stackgauge --elf build/firmware.elf
-
-# All functions
-stackgauge --elf build/firmware.elf -v
-
-# Fail CI if any single frame exceeds 512 bytes
-stackgauge --elf build/firmware.elf --stack-threshold 512
-```
-
-#### Alternative: map + `.su` (scoped to your code, with source locations)
-
-If you want source file and line numbers rather than just function names,
-add `-fstack-usage` to the components you own. In your component's
-`CMakeLists.txt`, after `idf_component_register(...)`:
-
-```cmake
-target_compile_options(${COMPONENT_LIB} PRIVATE -fstack-usage)
-```
-
-To instrument all ESP-IDF components (larger rebuild, broader coverage),
-add to the root `CMakeLists.txt` between `include(...)` and `project()`:
-
-```cmake
-idf_build_set_property(COMPILE_OPTIONS "-fstack-usage" APPEND)
-```
-
-After `idf.py build`, `.su` files land alongside `.obj` files under
-`build/esp-idf/<component>/CMakeFiles/`. Point stackgauge at the build
-directory:
-
-```bash
-stackgauge build/firmware.map --su-dir build/
-```
-
-**Known gaps with this approach**:
-- Functions marked `IRAM_ATTR` are placed in a generic `.iram1.0` section
-  with no function name embedded — they will be absent from the output.
-- Functions that the linker inlines away are present in `.su` files
-  (compiled) but have no symbol in the final binary — also absent.
-- Only files compiled with `-fstack-usage` appear; ESP-IDF library
-  functions are excluded unless you instrument all components.
-
-#### FreeRTOS and per-task stack budgets
-
-ESP-IDF uses FreeRTOS, so there is no single shared stack. Each task has
-its own independently allocated stack, and overflow is per-task. stackgauge
-reports per-function frame sizes — to use those numbers you need to:
-
-1. Identify the entry function of each task (passed to `xTaskCreate`).
-2. Trace the worst-case call chain from that entry point through the
-   function table.
-3. Sum the frame sizes along the chain.
-4. Compare the total against the stack size configured in `xTaskCreate`
-   (stack size is in words; multiply by 4 for bytes on Xtensa).
-
-The interrupt stack is separate from all task stacks. Any function reachable
-from an ISR (including `IRAM_ATTR` handlers) must fit within the interrupt
-stack budget, which is configured via `CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE`
-and related Kconfig options.
-
-The `--elf` output is the most useful starting point: it lists all functions
-sorted by frame size, so you can quickly identify the largest consumers and
-check which task contexts they appear in.
-
----
-
-## Pre-commit integration
-
-Add to your `.pre-commit-config.yaml`:
-
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: stackgauge
-        name: Stack depth analysis
-        language: system
-        entry: stackgauge
-        args:
-          - build/firmware.map
-          - --su-dir=build/
-          - --cgraph-dir=build/
-          - --stack-threshold=2048
-          - --depth-threshold=12
-        pass_filenames: false
-```
-
-Or use `stackgauge.toml` for thresholds and keep the hook entry minimal:
-
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: stackgauge
-        name: Stack depth analysis
-        language: system
-        entry: stackgauge
-        args: [build/firmware.map, --su-dir=build/]
-        pass_filenames: false
-```
-
-The hook exits 1 when a threshold is exceeded, which blocks the commit.
-Build the binary first (`cargo build --release`) or install it globally so
-the `system` language hook can find it on `$PATH`.
+Build the firmware first. `--stack-threshold` checks the reported maximum
+chain when available, otherwise the largest frame. A current PASS means no
+configured threshold was exceeded by the available data; missing or partial
+data can still pass. It does not establish a complete stack bound.
+See [usage](docs/usage.md) before using it as a build gate.
+
+## Supported inputs
+
+| Toolchain | Inputs actually read | Result |
+| --- | --- | --- |
+| GCC / GNU ld | map + `.su`, optional `.cgraph` | frames and optional static chain |
+| ESP-IDF / Xtensa GCC | GNU-style map + `.su`/`.cgraph`, or ELF | matched frames/chain, or instruction-derived frames |
+| ARM/Keil MDK | text containing recognized map and Call Graph sections | frames with `.su`, maximum/chain if present in the same input |
+| Keil C51/LX51 | overlay map | XDATA overlay usage and chain |
+| Rust/lld | lld map + frame inputs, or ELF | instruction-derived ARM frames via ELF; no ELF-only chain |
+
+The ARM parser does not discover or accept a separate armlink call-graph
+report through a dedicated option. A conventional map alone is insufficient
+to assume a cumulative result. ELF needs `.debug_info` and a supported ISA;
+its scanner recognizes selected ARM Thumb and Xtensa LX instructions.
+See [toolchains and limitations](docs/toolchains.md).
+
+## Documentation
+
+- [Installation](docs/installation.md)
+- [Usage and pre-commit integration](docs/usage.md)
+- [Configuration](docs/configuration.md)
+- [Toolchains and input formats](docs/toolchains.md)
+- [Architecture](docs/architecture.md)
+- [Development](docs/development.md) and [agent guidelines](AGENTS.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Architecture decisions](docs/adr/README.md)
+- [Changelog](CHANGELOG.md) and [manual source](docs/stackgauge.1)
+
+Run `stackgauge --help` for all options. Use `--format json` for structured
+output, `--top-n N` for a longer table, or `-v` for all frames.
+
+## AI Assistance
+
+Stackgauge was developed with assistance from [Claude](https://claude.ai)
+(Anthropic) for implementation, tests and project setup. From October 2026,
+[Codex](https://openai.com/codex/) (OpenAI) also contributed the agent and
+commit guideline tooling and documentation. Brandon Arrendondo is the
+accountable BISSELL Associate responsible for review and publication.
+
+Many earlier commits carry AI co-author trailers, but those trailers are not
+a complete record of AI assistance. From October 2026, assistance is
+acknowledged once here rather than through per-commit AI trailers.
+
+## License
+
+MIT. Copyright 2026 BISSELL Homecare, Inc. See [LICENSE](LICENSE).

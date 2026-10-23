@@ -1,10 +1,10 @@
 # stackgauge configuration
-# All values here are overridden by CLI flags.
+# CLI scalar values override these; directory and exclusion lists combine.
 
 # Fail if worst-case stack usage exceeds this many bytes.
 # stack_threshold = 1024
 
-# Fail if the call depth exceeds this count (ARM/Keil call graph only).
+# Fail if the call depth exceeds this count (when a call chain is available).
 # depth_threshold = 10
 
 # Number of functions to show in text output (default 10; use -v to show all).
@@ -19,7 +19,7 @@
 # exclude_dirs = ["CompilerIdC", "my_other_probe_dir"]
 
 # Force a specific map file format (auto-detected by default).
-# toolchain = "gnu-ld"  # gnu-ld | arm-keil | esp-idf | rust-lld
+# toolchain = "gnu-ld"  # gnu-ld | arm-keil | esp-idf | keil-c51 | rust-lld
 
 # For Rust/lld builds: path to the ELF file (replaces --su-dir)
 # elf_path = "target/thumbv8m.base-none-eabi/release/firmware"
