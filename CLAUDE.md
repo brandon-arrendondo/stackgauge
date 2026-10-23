@@ -72,8 +72,10 @@ only — no full-body scan needed.
 The scanner returns zero for functions without ENTRY; zero-frame entries
 are omitted from the report.
 
-**Requirement**: binary must include `.debug_info` (compiled with
-`debug = 2`; strip must be off).
+**Requirement**: retain `.debug_info` subprogram names and address ranges,
+with stripping disabled. `debug = 2` is a conservative recommendation, not
+a minimum level enforced by Stackgauge; other debug levels work only if they
+retain the entries the parser needs. Line tables alone are insufficient.
 
 ## ESP-IDF map + `.su` path
 

@@ -64,3 +64,5 @@ do not include it.
 Origin: adapted from Moldy ADR-0002 and the shared changelog policy.
 The user-facing categories and publication rules are retained; examples
 refer to analysis rather than formatting. Older releases are not backfilled.
+
+Source record: [Moldy ADR](https://github.com/brandon-arrendondo/moldy/blob/b19b34bf1647525d29f1f9d0e20144151a33ab74/docs/adr/0002-changelog-is-for-users.md).

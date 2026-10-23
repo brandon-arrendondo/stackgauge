@@ -26,7 +26,7 @@ enum OutputFormat {
 /// and, where call-graph data is available, worst-case cumulative stack depth.
 ///
 /// For Rust/lld builds pass --elf instead of (or in addition to) a map file.
-/// stackgauge will read stack frame sizes directly from DWARF .debug_info and instruction bytes.
+/// DWARF .debug_info supplies function names and ranges; instruction scans supply frame sizes.
 ///
 /// Exit codes:
 ///   0  no threshold exceeded by available data (which may be incomplete)

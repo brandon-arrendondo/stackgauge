@@ -36,3 +36,5 @@ explicit frame-only report must not imply a cumulative stack bound.
 
 Origin: the shared incomplete-run principle in Moldy ADR-0003 and Knots
 ADR-0005, restated for stack coverage rather than formatting completion.
+
+Source record: [Moldy ADR](https://github.com/brandon-arrendondo/moldy/blob/b19b34bf1647525d29f1f9d0e20144151a33ab74/docs/adr/0003-incomplete-runs-never-pass-as-clean.md).

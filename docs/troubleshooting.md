@@ -5,6 +5,9 @@ and match the linked build. Directory exclusions may hide probe output.
 For ELF, retain `.debug_info` with subprogram ranges and executable sections;
 stripped binaries and debug levels containing only line tables are unsuitable.
 Only nonzero frames recognized by the instruction scanner are retained.
+Unsupported ISAs are not rejected: every non-Xtensa ELF is scanned as Thumb.
+An x86 or RISC-V ELF can therefore produce meaningless results instead of an
+error. Restrict inputs to the documented ARM Thumb and Xtensa LX targets.
 
 **No cumulative result:** GNU ld/ESP-IDF need `--cgraph-dir` or `--cgraph-file`
 with GCC `-fdump-ipa-cgraph` output. ELF-only mode does not load cgraph data.

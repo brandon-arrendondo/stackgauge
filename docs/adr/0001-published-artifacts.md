@@ -99,3 +99,5 @@ adding a fixture. This applies the export rule at intake as well as release.
 Origin: adapted from Moldy ADR-0001. The four publication conditions are
 shared; the tool name, release workflow and fixture provenance are specific
 to Stackgauge. This proposal records no completed legal review.
+
+Source record: [Moldy ADR](https://github.com/brandon-arrendondo/moldy/blob/b19b34bf1647525d29f1f9d0e20144151a33ab74/docs/adr/0001-published-artifacts.md).

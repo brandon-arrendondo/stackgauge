@@ -9,10 +9,10 @@ stackgauge \- static stack depth analysis for embedded firmware
 parses linker map files and GCC
 .I .su
 stack-usage files to report per-function frame sizes and, where call-graph
-data is available, worst-case cumulative stack depth.
+data is available, reported cumulative stack usage and chain depth.
 .PP
-Designed to run as a pre-commit hook so stack overflows are caught before
-they reach hardware.
+Can run as a pre-commit hook to compare available stack data with thresholds.
+Missing or incomplete data can pass; success does not establish a complete stack bound.
 .PP
 Supported toolchains: GCC + GNU ld, ARM/Keil MDK (armlink), and
 ESP-IDF (Xtensa/GCC), Keil C51/LX51 and Rust/lld. The map format is auto-detected unless overridden
@@ -63,14 +63,15 @@ search. Repeatable. CompilerIdC, CompilerIdCXX, and CompilerIdASM are
 excluded by default.
 .TP
 .BR \-t ", " \-\-stack\-threshold " " \fIN\fR
-Fail (exit 1) if worst-case stack exceeds
+Fail (exit 1) if the reported chain, or the largest frame when no chain is
+available, exceeds
 .I N
 bytes.
 .TP
 .B \-\-depth\-threshold \fIN\fR
-Fail (exit 1) if call depth exceeds
+Fail (exit 1) if reported call-chain depth exceeds
 .I N
-(ARM/Keil or GNU ld + cgraph).
+(ARM/Keil, Keil C51, or GNU ld/ESP-IDF with cgraph).
 .TP
 .B \-\-top\-n \fIN\fR
 Number of functions to show in the report (default: 10). See also
@@ -113,9 +114,10 @@ Fatal error (missing file, parse failure, etc.).
 .SH CONFIGURATION FILE
 Place a
 .I stackgauge.toml
-in your project root or pass
+in your current working directory or pass
 .B \-c
-to specify a path. CLI flags take precedence over config values.
+to specify a path. CLI scalar values take precedence; search and exclusion
+lists combine. Relative paths are resolved from the current working directory.
 .PP
 Example:
 .PP
@@ -123,7 +125,7 @@ Example:
 stack_threshold = 2048
 depth_threshold = 12
 top_n = 20
-su_dirs = ["build/CMakeFiles", "build"]
+su_dirs = ["build"]
 # toolchain = "gnu-ld"
 .fi
 .SH EXAMPLES
@@ -131,10 +133,10 @@ su_dirs = ["build/CMakeFiles", "build"]
 Report top-10 largest frames (GNU ld):
 .B stackgauge build/firmware.map --su-dir build/
 .TP
-With worst-case depth analysis:
+With static call-chain analysis:
 .B stackgauge build/firmware.map --su-dir build/ --cgraph-dir build/
 .TP
-Fail if stack > 2 KB or depth > 12:
+Fail if reported chain/largest frame > 2 KB or reported depth > 12:
 .B stackgauge build/firmware.map --su-dir build/ --stack-threshold 2048 --depth-threshold 12
 .TP
 JSON output:

@@ -28,8 +28,14 @@ disabled). ARM scanning recognizes selected PUSH and SUB SP forms, not every
 stack adjustment. Xtensa scanning reads the initial windowed-ABI ENTRY;
 other ABIs and RISC-V ESP targets are not supported. Zero or unrecognized
 frames are omitted. Do not interpret the result as complete coverage of all
-functions or a cumulative bound. With both a map and ELF, map symbols filter
-frames when symbols were parsed. ELF replaces `.su` data.
+functions or a cumulative bound. Unsupported ISAs are not rejected: any
+non-Xtensa ELF is currently scanned as Thumb, which can produce meaningless
+results. Use only the documented ARM Thumb and Xtensa LX inputs.
+
+ELF replaces `.su` data. With both a map and ELF, GNU ld, ESP-IDF and lld
+modes filter frames when map symbols were parsed. ARM/Keil retains all supplied
+frames, including those absent from the map. Keil C51 uses overlay-map sizes
+and ignores the supplied ELF frames.
 
 Stackgauge does not identify RTOS task entry points, allocate task budgets or
 model interrupt nesting. Compare results against each runtime context's own

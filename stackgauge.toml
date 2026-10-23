@@ -1,7 +1,7 @@
 # stackgauge configuration
 # CLI scalar values override these; directory and exclusion lists combine.
 
-# Fail if worst-case stack usage exceeds this many bytes.
+# Fail if the reported chain or largest frame exceeds this many bytes.
 # stack_threshold = 1024
 
 # Fail if the call depth exceeds this count (when a call chain is available).
