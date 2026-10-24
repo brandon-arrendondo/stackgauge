@@ -17,13 +17,13 @@ exclude_dirs = ["probe"]
 CLI scalar values override configuration: thresholds, top count, toolchain
 and ELF path. CLI `.su` directories are combined with `su_dirs`; they do not
 replace them. Exclusions combine CLI and configuration values with the
-built-in names `CompilerIdC`, `CompilerIdCXX`, and `CompilerIdASM`.
+built-in names `CompilerIdC`, `CompilerIdCXX` and `CompilerIdASM`.
 
 The schema also accepts `format`, but the CLI currently ignores that config
 field: use `--format json`. There are no config keys for cgraph paths or
-explicit `.su` files; use their CLI options. Unknown config keys cause a
-parse warning and fallback to defaults for the entire file. An unreadable
-or missing file, even when explicitly named, currently falls back to defaults.
+explicit `.su` files; use their CLI options. An unknown key produces a parse warning,
+and the whole file is then ignored in favor of the defaults. A missing or
+unreadable file, even one named with `-c`, also falls back to the defaults.
 Review stderr to confirm the intended configuration was used.
 
 Canonical toolchain hints are `gnu-ld`, `esp-idf`, `arm-keil`, `keil-c51`

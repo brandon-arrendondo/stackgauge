@@ -4,16 +4,16 @@
 
 ## Context
 
-Stackgauge is used as a CI and pre-commit gate. A passing threshold check
-can currently describe only the data found, rather than a complete stack
-bound. The usage guide documents current behavior. This proposal changes
+Stackgauge is used as a CI and pre-commit gate. Today a passing threshold
+check says only that the data stackgauge found stayed within the thresholds;
+it does not establish a complete stack bound. The usage guide documents current behavior. This proposal changes
 none of it.
 
 ## Decision
 
 An incomplete or failed analysis never passes as clean. Success requires
 enough frame and call-graph information to support the requested claim.
-No frame data and no call-graph data is failure, not PASS.
+A run that finds neither frame data nor call-graph data fails; it does not PASS.
 
 A lower-bound result must never pass silently: an unknown or untraceable
 component, armlink's `+ Unknown(...)`, an unbounded or dynamic frame, or a
@@ -30,8 +30,8 @@ explicit frame-only report must not imply a cumulative stack bound.
 ## Consequences
 
 - Existing CI workflows may fail when they previously passed on partial data.
-- Parsers, graph traversal, reporting and CLI regressions need implementation.
-- Already produced output does not turn a partial analysis into a completed one.
+- The parsers, graph traversal and reporting need changes, with CLI regression tests.
+- A report saved from a partial analysis remains a partial result.
 - Record the shipped behavior under Changed in the changelog.
 
 Origin: the shared incomplete-run principle in Moldy ADR-0003 and Knots

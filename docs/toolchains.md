@@ -18,10 +18,11 @@ not complete, and a missing frame currently contributes zero.
 
 The ARM parser looks for literal `Call Graph`, `Maximum Stack Usage` and
 `Call chain for Maximum Stack Usage:` text within its single map input.
-It has no separate armlink report option or HTML reader. A conventional
-armlink map alone must not be assumed to provide cumulative stack data;
-armlink's separate `.htm`/`.txt` report is not automatically discovered.
-The combined fixture tests a parser shape, not full toolchain interoperability.
+It has no option for armlink's separate call-graph report, does not read HTML
+and does not find the `.htm` or `.txt` report on its own. Do not assume an
+ordinary armlink map holds cumulative stack data.
+The fixture that puts both sections in one file tests the parser, not
+compatibility with real armlink output.
 
 For ELF, retain full DWARF (`debug = 2` in Rust release profiles, with stripping
 disabled). ARM scanning recognizes selected PUSH and SUB SP forms, not every
@@ -38,5 +39,6 @@ frames, including those absent from the map. Keil C51 uses overlay-map sizes
 and ignores the supplied ELF frames.
 
 Stackgauge does not identify RTOS task entry points, allocate task budgets or
-model interrupt nesting. Compare results against each runtime context's own
-budget using that platform's documented units; do not infer them from frames.
+model interrupt nesting. Compare each result with the stack budget of its runtime
+context (a task or an interrupt), in the units that platform documents. The
+frames do not tell you the budget or its units.

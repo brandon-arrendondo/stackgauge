@@ -66,6 +66,16 @@ These conditions carry out the BISSELL AI Acceptable Use Policy's principles
 of accountability, data protection, intellectual property, data quality and
 AI attribution.
 
+### Fixtures
+
+Fixtures come only from synthetic or public builds whose licences permit
+redistribution. Supplier or customer build output, including material held
+under contract, never enters the repository, tests, issues or documentation.
+Sanitizing names alone does not establish permission to publish build output.
+Record the public source and licence, or the synthetic construction, when
+adding a fixture. This applies the export rule when material comes in, not
+only when it goes out.
+
 ## Consequences
 
 - This is policy, not the export procedure. Maintainers maintain the
@@ -87,17 +97,8 @@ AI attribution.
   history or replace an already-published artifact is a separate maintainer
   decision; this ADR grants no blanket history-rewrite authorization.
 
-## Fixture provenance
-
-Fixtures come only from synthetic or public builds whose licences permit
-redistribution. Supplier or customer build output, including material held
-under contract, never enters the repository, tests, issues or documentation.
-Sanitizing names alone does not establish permission to publish build output.
-Record the public source and licence, or the synthetic construction, when
-adding a fixture. This applies the export rule at intake as well as release.
-
 Origin: adapted from Moldy ADR-0001. The four publication conditions are
 shared; the tool name, release workflow and fixture provenance are specific
-to Stackgauge. This proposal records no completed legal review.
+to Stackgauge.
 
 Source record: [Moldy ADR](https://github.com/brandon-arrendondo/moldy/blob/b19b34bf1647525d29f1f9d0e20144151a33ab74/docs/adr/0001-published-artifacts.md).

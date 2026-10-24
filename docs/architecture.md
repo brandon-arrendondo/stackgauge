@@ -13,7 +13,7 @@ Only GNU ld and ESP-IDF map modes load cgraph inputs.
 then scans text bytes for selected ARM Thumb instructions or Xtensa ENTRY.
 It demangles names with `rustc-demangle`. It does not derive sizes from
 DWARF CFA tables. ELF inputs replace `.su` inputs, and ELF-only mode uses an
-empty synthetic map labelled Rust/lld, including for Xtensa.
+empty synthetic map labeled Rust/lld, including for Xtensa.
 
 `analysis.rs` associates frames with map symbols, sorts frames and compares
 thresholds. With no map symbols it includes all supplied frames. A maximum

@@ -1,8 +1,9 @@
 # stackgauge
 
-Static stack analysis for embedded firmware. Reads linker maps, GCC stack
-usage and call-graph dumps, or ELF/DWARF plus instruction bytes to report
-per-function frames and, where available, cumulative chains.
+Static stack analysis for embedded firmware. Stackgauge reads linker maps
+with GCC stack-usage (`.su`) and call-graph dumps, or an ELF file's DWARF and
+instruction bytes, and reports each function's stack frame and, where the
+inputs allow, the cumulative stack of its call chains.
 
 ```sh
 cargo install --path . --locked
@@ -11,9 +12,9 @@ stackgauge --elf build/firmware.elf --stack-threshold 2048
 ```
 
 Build the firmware first. `--stack-threshold` checks the reported maximum
-chain when available, otherwise the largest frame. A current PASS means no
-configured threshold was exceeded by the available data; missing or partial
-data can still pass. It does not establish a complete stack bound.
+chain when available, otherwise the largest frame. In this version, a PASS means only that the data stackgauge found
+stayed within the configured thresholds. A run with missing or partial data
+can still pass, so a PASS does not establish a complete stack bound.
 See [usage](docs/usage.md) before using it as a build gate.
 
 ## Supported inputs
@@ -22,13 +23,13 @@ See [usage](docs/usage.md) before using it as a build gate.
 | --- | --- | --- |
 | GCC / GNU ld | map + `.su`, optional `.cgraph` | frames and optional static chain |
 | ESP-IDF / Xtensa GCC | GNU-style map + `.su`/`.cgraph`, or ELF | matched frames/chain, or instruction-derived frames |
-| ARM/Keil MDK | text containing recognized map and Call Graph sections | frames with `.su`, maximum/chain if present in the same input |
+| ARM/Keil MDK | text containing recognized map and Call Graph sections | frames from `.su`; the maximum and its chain only if the same file contains them |
 | Keil C51/LX51 | overlay map | XDATA overlay usage and chain |
 | Rust/lld | lld map + frame inputs, or ELF | instruction-derived ARM frames via ELF; no ELF-only chain |
 
-The ARM parser does not discover or accept a separate armlink call-graph
-report through a dedicated option. A conventional map alone is insufficient
-to assume a cumulative result. ELF needs `.debug_info` and a supported ISA;
+The ARM parser reads one file. It neither finds armlink's separate call-graph
+report nor has an option to accept one, so do not expect a cumulative result
+from an ordinary armlink map. ELF needs `.debug_info` and a supported ISA;
 its scanner recognizes selected ARM Thumb and Xtensa LX instructions.
 See [toolchains and limitations](docs/toolchains.md).
 

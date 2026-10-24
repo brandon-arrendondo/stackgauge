@@ -9,7 +9,7 @@ stackgauge build/firmware.map --su-file build/main.su --format json
 ```
 
 Use `--top-n 20` to show more frames or `-v` for all. This affects text display,
-not threshold checking. JSON includes `functions`, `call_graph`, and separate
+not threshold checking. JSON includes `functions`, `call_graph` and separate
 stack/depth threshold flags. Check `call_graph.available`, `has_unknown` and
 `unknown_factors` before interpreting a cumulative number.
 
@@ -17,9 +17,9 @@ stack/depth threshold flags. Check `call_graph.available`, `has_unknown` and
 otherwise the largest single frame. `--depth-threshold` checks the reported
 chain length. Equality is allowed. Exit 1 means a threshold was exceeded;
 exit 2 means a fatal error or invalid invocation. Exit 0 means no configured
-threshold was exceeded; it currently also permits absent or incomplete data.
-A PASS therefore does not establish a complete stack bound. Dynamic frames,
-missing frames, indirect calls and recursion need independent review.
+threshold was exceeded. In this version it can also result when data is absent
+or incomplete, so a PASS does not establish a complete stack bound. Dynamic
+frames, missing frames, indirect calls and recursion need review by other means.
 [ADR-0003](adr/0003-incomplete-runs-never-pass-as-clean.md) proposes a stricter
 contract; it has not shipped.
 
