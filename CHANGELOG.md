@@ -8,3 +8,4 @@ Fixed or Removed. See [the changelog policy](docs/adr/0002-changelog-is-for-user
 ### Fixed
 
 - Debian and RPM packages include the MIT license, Markdown guides, and changelog under `/usr/share/doc/stackgauge/`.
+- Reject unsupported ELF architectures with exit 2 instead of treating their instructions as ARM Thumb-2.

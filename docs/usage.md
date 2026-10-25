@@ -39,3 +39,6 @@ repos:
 
 Build the firmware and install Stackgauge before running this hook. Add
 thresholds appropriate to the firmware only after reviewing input coverage.
+
+`--elf` accepts ARM Thumb-2 and Xtensa LX ELF files. Other architectures
+stop analysis with exit 2 before a report is emitted.

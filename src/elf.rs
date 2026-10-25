@@ -17,6 +17,13 @@ pub fn parse_elf_frames(path: &Path) -> Result<Vec<SuEntry>> {
     let obj = object::File::parse(data.as_slice())
         .with_context(|| format!("failed to parse ELF: {}", path.display()))?;
 
+    anyhow::ensure!(
+        obj.format() == object::BinaryFormat::Elf
+            && matches!(obj.architecture(), Architecture::Arm | Architecture::Xtensa),
+        "unsupported ELF architecture {:?}; supported ISAs: ARM Thumb-2 and Xtensa LX",
+        obj.architecture()
+    );
+
     let endian = if obj.is_little_endian() {
         RunTimeEndian::Little
     } else {
