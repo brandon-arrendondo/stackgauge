@@ -43,6 +43,7 @@ thresholds appropriate to the firmware only after reviewing input coverage.
 `--elf` accepts ARM Thumb-2 and Xtensa LX ELF files. Other architectures
 stop analysis with exit 2 before a report is emitted.
 
-ELF debug sections may use compression. Stackgauge limits their total
-uncompressed size to 64 MiB; unreadable, damaged, or oversized DWARF sections
-stop analysis with exit 2 before a report is emitted.
+ELF debug sections may use zlib compression. Zstandard sections are refused
+with exit 2 because their decoder cannot enforce this allocation limit.
+Stackgauge limits the total uncompressed size to 64 MiB; unreadable, damaged,
+or oversized DWARF sections stop analysis with exit 2 before a report is emitted.

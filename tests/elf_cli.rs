@@ -24,7 +24,7 @@ fn compressed_debug_matches_plain_frames() {
 
 #[test]
 fn invalid_compression_fails_without_report() {
-    for name in ["oversized", "damaged"] {
+    for name in ["oversized", "damaged", "zstd"] {
         for json in [false, true] {
             let output = run(name, json);
             assert_eq!(output.status.code(), Some(2));

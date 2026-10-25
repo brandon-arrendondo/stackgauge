@@ -137,6 +137,13 @@ fn build_name_map(
             id.name(),
             MAX_DWARF_BYTES
         );
+        // The zstd decoder may grow its output from the frame's own size,
+        // independently of the ELF compression header checked above.
+        anyhow::ensure!(
+            compressed.format != object::CompressionFormat::Zstandard,
+            "incomplete ELF analysis: cannot safely bound Zstandard section {}",
+            id.name()
+        );
         remaining -= compressed.uncompressed_size;
         section
             .uncompressed_data()

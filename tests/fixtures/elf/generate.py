@@ -36,3 +36,8 @@ if __name__ == '__main__':
     root = Path(__file__).parent
     for name, options in [('plain', {}), ('compressed', {'compressed': True}), ('oversized', {'compressed': True, 'oversized': True}), ('damaged', {'compressed': True, 'damaged': True})]:
         (root / (name + '.elf')).write_bytes(elf(**options))
+    zstd = elf(compressed=True)
+    section_table = struct.unpack_from('<I', zstd, 32)[0]
+    info_offset = struct.unpack_from('<I', zstd, section_table + 3 * 40 + 16)[0]
+    struct.pack_into('<I', zstd, info_offset, 2)  # ELFCOMPRESS_ZSTD
+    (root / 'zstd.elf').write_bytes(zstd)
