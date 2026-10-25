@@ -2,8 +2,12 @@ use crate::su::{FrameType, SuEntry};
 use anyhow::{Context, Result};
 use gimli::RunTimeEndian;
 use object::{Architecture, Object, ObjectSection, SectionKind};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
+
+// Bound the aggregate storage retained while parsing DWARF.
+const MAX_DWARF_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Parse an ELF file's DWARF `.debug_info` and code sections to extract
 /// per-function stack frame sizes.
@@ -119,19 +123,26 @@ fn build_name_map(
     obj: &object::File<'_>,
     endian: RunTimeEndian,
 ) -> Result<HashMap<u64, (String, u64)>> {
-    let load_section = |id: gimli::SectionId| -> std::result::Result<
-        gimli::EndianSlice<'_, RunTimeEndian>,
-        gimli::Error,
-    > {
-        let data = match obj.section_by_name(id.name()) {
-            Some(s) => s.data().unwrap_or(&[]),
-            None => &[],
+    let mut remaining = MAX_DWARF_BYTES;
+    let sections = gimli::DwarfSections::load(|id: gimli::SectionId| -> Result<Cow<'_, [u8]>> {
+        let Some(section) = obj.section_by_name(id.name()) else {
+            return Ok(Cow::Borrowed(&[]));
         };
-        Ok(gimli::EndianSlice::new(data, endian))
-    };
-
-    let dwarf = gimli::Dwarf::load(load_section)
-        .with_context(|| "failed to load DWARF from .debug_info")?;
+        let compressed = section
+            .compressed_data()
+            .with_context(|| format!("incomplete ELF analysis: cannot read {}", id.name()))?;
+        anyhow::ensure!(
+            compressed.uncompressed_size <= remaining,
+            "incomplete ELF analysis: {} exceeds the total DWARF limit of {} bytes",
+            id.name(),
+            MAX_DWARF_BYTES
+        );
+        remaining -= compressed.uncompressed_size;
+        section
+            .uncompressed_data()
+            .with_context(|| format!("incomplete ELF analysis: cannot decompress {}", id.name()))
+    })?;
+    let dwarf = sections.borrow(|data| gimli::EndianSlice::new(data, endian));
 
     let mut name_map: HashMap<u64, (String, u64)> = HashMap::new();
 

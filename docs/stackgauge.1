@@ -174,3 +174,8 @@ MIT. Copyright 2026 BISSELL Homecare, Inc.
 .SH ELF ARCHITECTURES
 The --elf input must target ARM Thumb-2 or Xtensa LX. Unsupported ELF
 architectures cause exit status 2 before a report is emitted.
+
+.SH COMPRESSED ELF DEBUG DATA
+Compressed DWARF sections are supported. Their total uncompressed size is
+limited to 64 MiB. Damaged or oversized sections cause exit status 2
+before a report is emitted.
