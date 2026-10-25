@@ -392,6 +392,7 @@ dependencies = [
  "anyhow",
  "clap",
  "colored",
+ "flate2",
  "gimli",
  "object",
  "regex",

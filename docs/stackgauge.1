@@ -159,6 +159,17 @@ repos:
         args: [build/firmware.map, --su-dir=build/]
         pass_filenames: false
 .fi
+.SH ELF ARCHITECTURES
+The --elf input must target ARM Thumb-2 or Xtensa LX. Unsupported ELF
+architectures cause exit status 2 before a report is emitted.
+.SH COMPRESSED ELF DEBUG DATA
+Zlib-compressed DWARF sections are supported. Their combined decompressed
+size is limited to 64 MiB, plus one temporary sentinel byte for validation.
+Plain sections are borrowed and do not count against this budget.
+Zlib streams must finish, consume all input, and match their declared size.
+Damaged or oversized compressed sections cause exit status 2 before a report.
+Zstandard is refused with exit status 2 because its decoder's internal window
+allocation is independent of the ELF section size limit.
 .SH SEE ALSO
 .BR gcc (1),
 .BR ld (1)
@@ -170,13 +181,3 @@ Indirect calls, missing frames and unknown components can leave lower bounds.
 ELF scans recognize selected instructions and omit zero or unrecognized frames.
 .SH LICENSE
 MIT. Copyright 2026 BISSELL Homecare, Inc.
-
-.SH ELF ARCHITECTURES
-The --elf input must target ARM Thumb-2 or Xtensa LX. Unsupported ELF
-architectures cause exit status 2 before a report is emitted.
-
-.SH COMPRESSED ELF DEBUG DATA
-Zlib-compressed DWARF sections are supported. Zstandard sections are
-refused with exit status 2 because their decoder cannot enforce this limit. Their total uncompressed size is
-limited to 64 MiB. Damaged or oversized sections cause exit status 2
-before a report is emitted.

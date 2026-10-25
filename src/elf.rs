@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 
-// Bound the aggregate storage retained while parsing DWARF.
+// Bound aggregate allocated output from compressed DWARF sections.
 const MAX_DWARF_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Parse an ELF file's DWARF `.debug_info` and code sections to extract
@@ -118,6 +118,35 @@ fn find_section(sections: &[(u64, Vec<u8>)], addr: u64) -> Option<(u64, &[u8])> 
         .map(|(base, data)| (*base, data.as_slice()))
 }
 
+/// Validate both the ELF size claim and the entire zlib stream.
+fn decompress_zlib(input: &[u8], expected: u64) -> Result<Vec<u8>> {
+    let size = usize::try_from(expected).context("DWARF section size does not fit memory")?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(size)
+        .context("cannot allocate DWARF section")?;
+    output.resize(size, 0);
+    let mut decoder = flate2::Decompress::new(true);
+    let mut status = decoder.decompress(input, &mut output, flate2::FlushDecompress::Finish)?;
+    if status != flate2::Status::StreamEnd {
+        // A stack sentinel lets the decoder finish after filling the output,
+        // or detect excess output, without growing the allocated buffer.
+        let consumed = decoder.total_in() as usize;
+        status = decoder.decompress(
+            &input[consumed..],
+            &mut [0u8; 1],
+            flate2::FlushDecompress::Finish,
+        )?;
+    }
+    anyhow::ensure!(
+        status == flate2::Status::StreamEnd
+            && decoder.total_in() == input.len() as u64
+            && decoder.total_out() == expected,
+        "zlib stream is incomplete, has trailing bytes, or disagrees with the ELF size"
+    );
+    Ok(output)
+}
+
 /// Build a map from function start address → (linkage_name, length) using `.debug_info`.
 fn build_name_map(
     obj: &object::File<'_>,
@@ -131,22 +160,26 @@ fn build_name_map(
         let compressed = section
             .compressed_data()
             .with_context(|| format!("incomplete ELF analysis: cannot read {}", id.name()))?;
+        if compressed.format == object::CompressionFormat::None {
+            return Ok(Cow::Borrowed(compressed.data));
+        }
         anyhow::ensure!(
             compressed.uncompressed_size <= remaining,
-            "incomplete ELF analysis: {} exceeds the total DWARF limit of {} bytes",
+            "incomplete ELF analysis: {} exceeds the total decompressed DWARF limit of {} bytes",
             id.name(),
             MAX_DWARF_BYTES
         );
-        // The zstd decoder may grow its output from the frame's own size,
-        // independently of the ELF compression header checked above.
+        // ruzstd's internal window buffer is independent of the ELF size
+        // header and can allocate up to 128 MiB even for tiny output.
         anyhow::ensure!(
-            compressed.format != object::CompressionFormat::Zstandard,
-            "incomplete ELF analysis: cannot safely bound Zstandard section {}",
+            compressed.format == object::CompressionFormat::Zlib,
+            "incomplete ELF analysis: unsupported or unbounded compression {:?} in {}",
+            compressed.format,
             id.name()
         );
         remaining -= compressed.uncompressed_size;
-        section
-            .uncompressed_data()
+        decompress_zlib(compressed.data, compressed.uncompressed_size)
+            .map(Cow::Owned)
             .with_context(|| format!("incomplete ELF analysis: cannot decompress {}", id.name()))
     })?;
     let dwarf = sections.borrow(|data| gimli::EndianSlice::new(data, endian));

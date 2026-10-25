@@ -10,16 +10,25 @@ import struct
 import zlib
 
 
-def elf(compressed=False, oversized=False, damaged=False):
+def elf(compressed=False, oversized=False, damaged=False, two_units=False, understated=False, trailing=False):
     abbrev = bytes([1, 0x11, 1, 0, 0, 2, 0x2e, 0, 3, 8, 0x11, 1, 0x12, 6, 0, 0, 0])
     entries = bytes([1, 2]) + b'frame\0' + struct.pack('<II', 0x1000, 4) + b'\0'
     unit = struct.pack('<HI B', 4, 0, 4) + entries
     info = struct.pack('<I', len(unit)) + unit
+    declared = len(info)
+    if two_units:
+        second = bytes([1, 2]) + b'large_frame\0' + struct.pack('<II', 0x1004, 4) + b'\0'
+        second_unit = struct.pack('<HI B', 4, 0, 4) + second
+        info += struct.pack('<I', len(second_unit)) + second_unit
+    if not understated:
+        declared = len(info)
     names = b'\0.text\0.debug_abbrev\0.debug_info\0.shstrtab\0'
-    sections = [(1, 1, 6, 0x1000, b'\x80\xb5\x84\xb0'), (7, 1, 0, 0, abbrev)]
+    sections = [(1, 1, 6, 0x1000, b'\x80\xb5\x84\xb0' + (b'\x80\xb5\x90\xb0' if two_units else b'')), (7, 1, 0, 0, abbrev)]
     if compressed:
         packed = b'broken' if damaged else zlib.compress(info)
-        info = struct.pack('<III', 1, 64 * 1024 * 1024 + 1 if oversized else len(info), 1) + packed
+        if trailing:
+            packed += b'junk'
+        info = struct.pack('<III', 1, 64 * 1024 * 1024 + 1 if oversized else declared, 1) + packed
     sections += [(21, 1, 0x800 if compressed else 0, 0, info), (33, 3, 0, 0, names)]
     data = bytearray(52)
     headers = [bytes(40)]
@@ -41,3 +50,18 @@ if __name__ == '__main__':
     info_offset = struct.unpack_from('<I', zstd, section_table + 3 * 40 + 16)[0]
     struct.pack_into('<I', zstd, info_offset, 2)  # ELFCOMPRESS_ZSTD
     (root / 'zstd.elf').write_bytes(zstd)
+
+    for name, options in [
+        ('two-units', {'two_units': True}),
+        ('understated', {'two_units': True, 'understated': True}),
+        ('trailing', {'trailing': True}),
+    ]:
+        (root / (name + '.elf')).write_bytes(elf(compressed=True, **options))
+
+    for name, delta in [('overstated', 1), ('understated-one', -1)]:
+        data = elf(compressed=True)
+        table = struct.unpack_from('<I', data, 32)[0]
+        offset = struct.unpack_from('<I', data, table + 3 * 40 + 16)[0]
+        size = struct.unpack_from('<I', data, offset + 4)[0]
+        struct.pack_into('<I', data, offset + 4, size + delta)
+        (root / (name + '.elf')).write_bytes(data)
